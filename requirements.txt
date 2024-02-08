@@ -1,0 +1,14 @@
+numpy==1.26.3
+jax==0.4.23
+flax==0.7.5
+scipy==1.11.4
+torch==2.1.2
+torchvision==0.16.2
+optax==0.1.7
+matfree==0.0.12
+tree_math==0.2.0
+urllib3==1.26.15
+sklearn==0.0
+matplotlib==3.8.2
+seaborn==0.13.1
+pandas==2.1.4
