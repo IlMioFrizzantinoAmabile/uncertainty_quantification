@@ -47,18 +47,24 @@ class CIFAR100(torch.utils.data.Dataset):
 def get_cifar100(
         batch_size = 128,
         shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
         seed = 0,
         download: bool = True,
         data_path="../datasets",
     ):
     dataset = CIFAR100(
         train=True,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
     )
     dataset_test = CIFAR100(
         train=False,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -84,6 +90,8 @@ def get_cifar100(
 def get_cifar100_augmented(
         batch_size = 128,
         shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
         seed = 0,
         download: bool = True,
         data_path="../datasets",
@@ -96,6 +104,8 @@ def get_cifar100_augmented(
     dataset = CIFAR100(
         train=True,
         transform=train_transform,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -103,6 +113,8 @@ def get_cifar100_augmented(
     dataset_test = CIFAR100(
         train=False,
         transform=None,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 

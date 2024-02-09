@@ -3,7 +3,6 @@ import torchvision
 import numpy as np
 from PIL import Image
 
-
 class RotationTransform:
     """Rotate the given angle."""
 
@@ -102,3 +101,13 @@ def get_loader(
                 drop_last=drop_last
             ),
         )
+
+def get_output_dim(dataset_name):
+    if dataset_name in ["Sinusoidal", "UCI"]:
+        return 1 
+    elif dataset_name == "CelebA":
+        return 40
+    elif dataset_name == "CIFAR-100":
+        return 100
+    else:
+        return 10

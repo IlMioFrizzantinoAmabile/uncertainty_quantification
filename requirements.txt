@@ -11,4 +11,4 @@ urllib3==1.26.15
 sklearn==0.0
 matplotlib==3.8.2
 seaborn==0.13.1
-pandas==2.1.4
+pandas==1.5.2

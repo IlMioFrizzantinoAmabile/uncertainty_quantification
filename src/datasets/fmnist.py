@@ -42,18 +42,24 @@ class FashionMNIST(torch.utils.data.Dataset):
 def get_fmnist(
         batch_size = 128,
         shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
         seed = 0,
         download: bool = True,
         data_path="../datasets",
     ):
     dataset = FashionMNIST(
         train=True,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
     )
     dataset_test = FashionMNIST(
         train=False,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -81,6 +87,8 @@ def get_rotated_fmnist(
         angle: float = 0, 
         batch_size = 128,
         shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
         seed = 0,
         download: bool = True,
         data_path="../datasets",
@@ -89,6 +97,8 @@ def get_rotated_fmnist(
     dataset = FashionMNIST(
         train=True,
         transform=rotation,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -96,6 +106,8 @@ def get_rotated_fmnist(
     dataset_test = FashionMNIST(
         train=False,
         transform=rotation,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 

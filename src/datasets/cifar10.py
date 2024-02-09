@@ -48,18 +48,24 @@ class CIFAR10(torch.utils.data.Dataset):
 def get_cifar10(
         batch_size = 128,
         shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
         seed = 0,
         download: bool = True,
         data_path="../datasets",
     ):
     dataset = CIFAR10(
         train=True,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
     )
     dataset_test = CIFAR10(
         train=False,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -85,6 +91,8 @@ def get_cifar10(
 def get_cifar10_augmented(
         batch_size = 128,
         shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
         seed = 0,
         download: bool = True,
         data_path="../datasets",
@@ -97,6 +105,8 @@ def get_cifar10_augmented(
     dataset = CIFAR10(
         train=True,
         transform=train_transform,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -104,6 +114,8 @@ def get_cifar10_augmented(
     dataset_test = CIFAR10(
         train=False,
         transform=None,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
@@ -170,13 +182,12 @@ class CorruptedCIFAR10(CIFAR10):
         self.targets = np.load(f"{data_path}/CIFAR-10-C/labels.npy").astype(np.int64)
         self.data = self.data[(severity_level-1) * 10000 : (severity_level) * 10000]
         self.targets = self.targets[(severity_level-1) * 10000 : (severity_level) * 10000]
-        self.data = torch.from_numpy(self.data).float()#.numpy()
-        self.targets = torch.from_numpy(self.targets)#.numpy()
+        self.data = torch.from_numpy(self.data).float()
+        self.targets = torch.from_numpy(self.targets)
 
         mean, std = [x*255 for x in (0.4914, 0.4822, 0.4465)], [x*255 for x in (0.2470, 0.2435, 0.2616)]
         self.data = torchvision.transforms.functional.normalize(
             self.data.permute(0, 3, 1, 2),
-            #torch.from_numpy(self.data).float().permute(0, 3, 1, 2),
             mean,
             std
         ).permute(0, 2, 3, 1).numpy()
