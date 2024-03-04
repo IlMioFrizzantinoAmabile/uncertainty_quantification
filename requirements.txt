@@ -12,3 +12,4 @@ sklearn==0.0
 matplotlib==3.8.2
 seaborn==0.13.1
 pandas==1.5.2
+tqdm

@@ -58,7 +58,7 @@ def get_mnist(
     )
     dataset_test = MNIST(
         train=False,
-        n_samples_per_class=n_samples_per_class,
+        n_samples_per_class=None,
         classes=classes,
         seed=seed,
         download=download, 
@@ -105,7 +105,7 @@ def get_rotated_mnist(
     dataset_test = MNIST(
         train=False,
         transform=rotation,
-        n_samples_per_class=n_samples_per_class,
+        n_samples_per_class=None,
         classes=classes,
         seed=seed,
         download=download, 

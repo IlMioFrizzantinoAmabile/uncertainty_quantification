@@ -58,7 +58,7 @@ def get_fmnist(
     )
     dataset_test = FashionMNIST(
         train=False,
-        n_samples_per_class=n_samples_per_class,
+        n_samples_per_class=None,
         classes=classes,
         seed=seed,
         download=download, 
@@ -106,7 +106,7 @@ def get_rotated_fmnist(
     dataset_test = FashionMNIST(
         train=False,
         transform=rotation,
-        n_samples_per_class=n_samples_per_class,
+        n_samples_per_class=None,
         classes=classes,
         seed=seed,
         download=download, 

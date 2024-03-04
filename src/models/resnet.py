@@ -56,6 +56,7 @@ class PreActResNetBlock(ResNetBlock):
                         use_bias=False)(x)
 
         x_out = z + x
+        return x_out
 
 
 class ResNet(nn.Module):
@@ -67,6 +68,7 @@ class ResNet(nn.Module):
 
     @nn.compact
     def __call__(self, x, train=True):
+
         # A first convolution on the original image to scale up the channel size
         x = nn.Conv(self.c_hidden[0], kernel_size=(3, 3), kernel_init=resnet_kernel_init, use_bias=False)(x)
         if self.block_class == ResNetBlock:  # If pre-activation block, we do not apply non-linearities yet

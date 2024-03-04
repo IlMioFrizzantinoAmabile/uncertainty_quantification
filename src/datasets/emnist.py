@@ -1,34 +1,29 @@
 from pathlib import Path
 import torch
 import torchvision
-from src.datasets.utils import get_loader, get_subset_data
+from src.datasets.utils import get_loader, get_subset_data, RotationTransform
 
-class CIFAR100(torch.utils.data.Dataset):
+class EMNIST(torch.utils.data.Dataset):
     def __init__(
         self,
         train: bool = True,
         transform = None,
         n_samples_per_class: int = None,
-        classes: list = list(range(100)),
+        classes: list = list(range(10)),
         seed: int = 0,
         download: bool = True,
         data_path: str = "../datasets",
     ):
         self.transform = transform
         self.path = Path(data_path)
-        self.dataset = torchvision.datasets.CIFAR100(root=self.path, train=train, download=download)
+        self.dataset = torchvision.datasets.EMNIST(root=self.path, split='digits' if train else 'digits', download=download)
 
-        if len(classes)>=100 and n_samples_per_class is None:
+        if len(classes)>=10 and n_samples_per_class is None:
             self.data, self.targets = self.dataset.data, self.dataset.targets
         else:
             self.data, self.targets = get_subset_data(self.dataset.data, self.dataset.targets, classes, n_samples_per_class=n_samples_per_class, seed=seed)
 
-        mean, std = [x*255 for x in (0.4914, 0.4822, 0.4465)], [x*255 for x in (0.2470, 0.2435, 0.2616)]
-        self.data = torchvision.transforms.functional.normalize(
-            torch.from_numpy(self.data).float().permute(0, 3, 1, 2),
-            mean,
-            std
-        ).permute(0, 2, 3, 1).numpy()
+        self.data = (self.data.float().unsqueeze(-1) / 255.0).numpy()
         self.targets = torch.nn.functional.one_hot(torch.tensor(self.targets), len(classes)).numpy()
 
     def __getitem__(self, index):
@@ -42,9 +37,9 @@ class CIFAR100(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.data)
-    
 
-def get_cifar100(
+
+def get_emnist(
         batch_size = 128,
         shuffle = False,
         n_samples_per_class: int = None,
@@ -53,7 +48,7 @@ def get_cifar100(
         download: bool = True,
         data_path="../datasets",
     ):
-    dataset = CIFAR100(
+    dataset = EMNIST(
         train=True,
         n_samples_per_class=n_samples_per_class,
         classes=classes,
@@ -61,7 +56,7 @@ def get_cifar100(
         download=download, 
         data_path=data_path, 
     )
-    dataset_test = CIFAR100(
+    dataset_test = EMNIST(
         train=False,
         n_samples_per_class=None,
         classes=classes,
@@ -87,7 +82,8 @@ def get_cifar100(
     return train_loader, valid_loader, test_loader
 
 
-def get_cifar100_augmented(
+def get_rotated_emnist(
+        angle: float = 0, 
         batch_size = 128,
         shuffle = False,
         n_samples_per_class: int = None,
@@ -96,23 +92,19 @@ def get_cifar100_augmented(
         download: bool = True,
         data_path="../datasets",
     ):
-    augment_transform = torchvision.transforms.Compose([
-            torchvision.transforms.RandomHorizontalFlip(),
-            #torchvision.transforms.RandomVerticalFlip(),
-            torchvision.transforms.RandomResizedCrop((32,32),scale=(0.8,1.0),ratio=(0.9,1.1), antialias=True),
-            ])
-    dataset = CIFAR100(
+    rotation = torchvision.transforms.Compose([RotationTransform(angle)])
+    dataset = EMNIST(
         train=True,
-        transform=augment_transform,
+        transform=rotation,
         n_samples_per_class=n_samples_per_class,
         classes=classes,
         seed=seed,
         download=download, 
         data_path=data_path, 
     )
-    dataset_test = CIFAR100(
+    dataset_test = EMNIST(
         train=False,
-        transform=augment_transform,
+        transform=rotation,
         n_samples_per_class=None,
         classes=classes,
         seed=seed,

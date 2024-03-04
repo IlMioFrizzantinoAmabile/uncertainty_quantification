@@ -26,7 +26,22 @@ def cross_entropy_loss(preds, y, rho=1.0):
     preds = jax.nn.log_softmax(preds, axis=-1)
     return -jnp.mean(jnp.sum(preds * y, axis=-1))
 
-@partial(jax.jit, static_argnames=['model', 'train', 'likelihood'])
+
+@partial(jax.jit, static_argnames=['rho'])
+def multiclass_binary_cross_entropy_loss(preds, y, rho=1.0):
+    """
+    preds: (batch_size, n_classes) (logits) Each element is the unnormalized log probability of a binary
+      prediction.
+    y: (batch_size, n_classes) Binary labels whose values are {0,1} or multi-class target
+      probabilities. See note about compatibility with `logits` above.
+    """
+    preds = preds * rho
+    y = y.astype(preds.dtype)
+    log_p = jax.nn.log_sigmoid(preds)
+    log_not_p = jax.nn.log_sigmoid(-preds)
+    return jnp.mean(y * log_p + (1. - y) * log_not_p)
+
+#@partial(jax.jit, static_argnames=['model', 'train', 'likelihood'])
 def calculate_loss_with_batchstats(
     model, 
     params, 
@@ -34,26 +49,32 @@ def calculate_loss_with_batchstats(
     x, 
     y, 
     train: bool = False,
-    likelihood: Literal["classification", "regression"] = "classification"
+    likelihood: Literal["classification", "regression", "binary_multiclassification"] = "classification"
 ):
     if likelihood == "regression":
         negative_log_likelihood = log_gaussian_log_loss
     elif likelihood == "classification":
         negative_log_likelihood = cross_entropy_loss
+    elif likelihood == "binary_multiclassification":
+        negative_log_likelihood = multiclass_binary_cross_entropy_loss
     else:
-        raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression' or 'classification'.")
+        raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression', 'classification' or 'binary_multiclassification'.")
     outs = model.apply({'params': params, 'batch_stats': batch_stats},
                 x,
                 train=train,
                 mutable=['batch_stats'] if train else False)
     preds, new_model_state = outs if train else (outs, None)
     loss = negative_log_likelihood(preds, y)
-    if likelihood == "classification":
-        acc = jnp.sum(preds.argmax(axis=-1) == y.argmax(axis=-1))
-        return loss, (acc, new_model_state)
-    elif likelihood == "regression":
+    if likelihood == "regression":
         sse = jnp.sum((preds-y)**2)
         return loss, (sse, new_model_state)
+    elif likelihood == "classification":
+        acc = jnp.sum(preds.argmax(axis=-1) == y.argmax(axis=-1))
+        return loss, (acc, new_model_state)
+    elif likelihood == "binary_multiclassification":
+        num_classes = preds.shape[1]
+        acc = jnp.sum((preds>0.) == (y==1)) / num_classes
+        return loss, (acc, new_model_state)
 
 
 @partial(jax.jit, static_argnames=['model', 'likelihood'])
@@ -62,29 +83,26 @@ def calculate_loss_without_batchstats(
     params, 
     x, 
     y,
-    likelihood: Literal["classification", "regression"] = "classification"
+    likelihood: Literal["classification", "regression", "binary_multiclassification"] = "classification",
 ):
     if likelihood == "regression":
         negative_log_likelihood = log_gaussian_log_loss
     elif likelihood == "classification":
         negative_log_likelihood = cross_entropy_loss
+    elif likelihood == "binary_multiclassification":
+        negative_log_likelihood = multiclass_binary_cross_entropy_loss
     else:
-        raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression' or 'classification'.")
+        raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression', 'classification' or 'binary_multiclassification'.")
     preds = model.apply(params, x)
     loss = negative_log_likelihood(preds, y)
 
-    if likelihood == "classification":
-        acc = jnp.sum(preds.argmax(axis=-1) == y.argmax(axis=-1))
-        return loss, (acc, )
-    elif likelihood == "regression":
+    if likelihood == "regression":
         sse = jnp.sum((preds-y)**2)
         return loss, (sse, )
-
-
-def compute_num_params(params):
-    vector_params = jax.flatten_util.ravel_pytree(params)[0]
-    return vector_params.shape[0]
-
-def compute_norm_params(params):
-    vector_params = jax.flatten_util.ravel_pytree(params)[0]
-    return jnp.linalg.norm(vector_params).item()
+    elif likelihood == "classification":
+        acc = jnp.sum(preds.argmax(axis=-1) == y.argmax(axis=-1))
+        return loss, (acc, )
+    elif likelihood == "binary_multiclassification":
+        num_classes = preds.shape[1]
+        acc = jnp.sum((preds>0.) == (y==1)) / num_classes
+        return loss, (acc, )

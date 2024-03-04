@@ -73,7 +73,7 @@ def get_loader(
             dataset, 
             batch_size=batch_size, 
             shuffle=shuffle, 
-            num_workers=5, 
+            num_workers=4, 
             pin_memory=False, 
             drop_last=drop_last
         )
@@ -88,7 +88,7 @@ def get_loader(
                 dataset_train, 
                 batch_size=batch_size, 
                 shuffle=shuffle, 
-                num_workers=5, 
+                num_workers=4, 
                 pin_memory=False, 
                 drop_last=drop_last
             ),
@@ -96,7 +96,7 @@ def get_loader(
                 dataset_valid, 
                 batch_size=batch_size, 
                 shuffle=shuffle, 
-                num_workers=5, 
+                num_workers=4, 
                 pin_memory=False, 
                 drop_last=drop_last
             ),
@@ -106,7 +106,7 @@ def get_output_dim(dataset_name):
     if dataset_name in ["Sinusoidal", "UCI"]:
         return 1 
     elif dataset_name == "CelebA":
-        return 40
+        return 6 #40
     elif dataset_name == "CIFAR-100":
         return 100
     else:

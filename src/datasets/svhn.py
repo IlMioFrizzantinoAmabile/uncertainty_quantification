@@ -64,7 +64,7 @@ def get_svhn(
     )
     dataset_test = SVHN(
         train=False,
-        n_samples_per_class=n_samples_per_class,
+        n_samples_per_class=None,
         classes=classes,
         seed=seed,
         download=download, 
@@ -97,14 +97,14 @@ def get_svhn_augmented(
         download: bool = True,
         data_path="../datasets",
     ):
-    train_transform = torchvision.transforms.Compose([
+    augment_transform = torchvision.transforms.Compose([
             #torchvision.transforms.RandomHorizontalFlip(),
             #torchvision.transforms.RandomVerticalFlip(),
             torchvision.transforms.RandomResizedCrop((32,32),scale=(0.8,1.0),ratio=(0.9,1.1), antialias=True),
             ])
     dataset = SVHN(
         train=True,
-        transform=train_transform,
+        transform=augment_transform,
         n_samples_per_class=n_samples_per_class,
         classes=classes,
         seed=seed,
@@ -113,8 +113,8 @@ def get_svhn_augmented(
     )
     dataset_test = SVHN(
         train=False,
-        transform=None,
-        n_samples_per_class=n_samples_per_class,
+        transform=augment_transform,
+        n_samples_per_class=None,
         classes=classes,
         seed=seed,
         download=download, 
