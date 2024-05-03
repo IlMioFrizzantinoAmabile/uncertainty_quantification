@@ -45,6 +45,10 @@ def get_ggn_vector_product(
             H = jnp.einsum("bo, bi->boi", pred, pred)
             H = D - H
             HJ_tree = jnp.einsum("boi, bi->bo", H, J_tree)
+        elif likelihood_type == "binary_multiclassification":
+            #pred = jax.nn.sigmoid(pred)
+            #HJ_tree = jnp.einsum("bo, bo->bo", pred - pred**2, J_tree)
+            HJ_tree = J_tree
         else:
             raise ValueError(f"Likelihood {likelihood_type} not supported. Use either 'regression' or 'classification'.")
         JtHJ_tree = model_on_data_vjp(HJ_tree)[0]

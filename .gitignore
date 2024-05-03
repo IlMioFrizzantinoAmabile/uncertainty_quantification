@@ -1,2 +1,4 @@
 /virtualenv
-datasets/__pycache__
+src/datasets/__pycache__
+src/autodiff/__pycache__
+bash

@@ -97,10 +97,11 @@ def get_jacobian_explicit(params_dict, model):
     def jacobian(query_data):
         query_data = jnp.expand_dims(query_data, 0)
         fun = lambda p : model_fun(p, query_data)
-        pytree_jacob = jax.jacfwd(fun)(params)
+        #pytree_jacob = jax.jacfwd(fun)(params)
+        pytree_jacob = jax.jacrev(fun)(params)
         # we return the jacobian as a model.output_dim x p matrix
         # where p is the number of params
-        jacob_array = jnp.array([vectorize_fun(jax.tree_map(
+        jacob_array = jnp.asarray([vectorize_fun(jax.tree_map(
             lambda x: x[:, i,:], pytree_jacob)) for i in range(model.output_dim)]) 
         return jacob_array
     return jacobian

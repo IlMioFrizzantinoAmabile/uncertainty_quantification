@@ -12,6 +12,7 @@ from src.datasets.cifar10 import corruption_types
 from src.ood_scores.ensemble import ensemble_score_fun
 from src.ood_scores.diagonal_lla import diagonal_lla_score_fun
 from src.ood_scores.scod import scod_score_fun
+from src.ood_scores.swag import swag_score_fun
 from src.ood_scores.hm_lanczos import high_memory_lanczos_score_fun, smart_lanczos_score_fun
 from src.ood_scores.lm_lanczos import low_memory_lanczos_score_fun
 
@@ -31,7 +32,7 @@ parser.add_argument("--model_seed", default=420, type=int)
 ##############
 # ood scores #
 ##############
-parser.add_argument("--score", type=str, choices=["scod", "ensemble", "local_ensemble", "sketched_local_ensemble", "low_rank_lla", "smart_lla", "diagonal_lla"], default=None)
+parser.add_argument("--score", type=str, choices=["scod", "swag", "ensemble", "local_ensemble", "sketched_local_ensemble", "low_rank_lla", "smart_lla", "diagonal_lla"], default=None)
 # lanczos
 parser.add_argument("--lanczos_hm_iter", default=10, type=int, help="Lancsos high-memory iterations to run")
 parser.add_argument("--lanczos_lm_iter", default=100, type=int, help="Lancsos low-mwmory iterations to run")
@@ -51,8 +52,15 @@ parser.add_argument("--prior_std", default=0.1, type=float, help="Scale the eige
 parser.add_argument("--use_hessian", action="store_true", required=False, default=False)
 # diagonal lla
 parser.add_argument("--hutchinson_samples", default=10000, type=int, help="Only used for diagonal lla score")
+parser.add_argument("--hutchinson_seed", default=1, type=int, help="Only used for diagonal lla score")
 # ensemble
 parser.add_argument("--ensemble_size", default=5, type=int, help="Only used for ensemble score")
+#swag
+parser.add_argument("--swag_n_vec", default=0, type=int, help="Only used for swag score")
+parser.add_argument("--swag_diag_only", action="store_true", required=False, default=False)
+parser.add_argument("--swag_lr", default=0.001, type=float)
+parser.add_argument("--swag_momentum", default=0.9, type=float)
+parser.add_argument("--swag_collect_interval", default=3, type=int)
 
 # print more stuff
 parser.add_argument("--verbose", action="store_true", required=False, default=False)
@@ -150,13 +158,13 @@ if __name__ == "__main__":
         elif args.score in ["sketched_local_ensemble"]:
             args_dict['lanczos_hm_iter'] = 0
 
-    # number of "good" vectors out of Lanczsos is 50% by default
+    # number of "good" vectors out of Lanczsos is 90% by default
     if args_dict["n_eigenvec_hm"] is None:
         args_dict["n_eigenvec_hm"] = int(0.9 * args_dict["lanczos_hm_iter"])
     if args_dict["n_eigenvec_lm"] is None:
         args_dict["n_eigenvec_lm"] = int(0.9 * args_dict["lanczos_lm_iter"])
 
-    # set reasonable srft sketching padding () to reduce prime factorization max value (needed by jax fft implementation)
+    # set reasonable srft sketching padding to reduce prime factorization max value (needed by jax fft implementation)
     if args.sketch == "srft" and args.sketch_padding is None:
         args_dict["sketch_padding"] = 0
         if args.model == "LeNet":
@@ -170,28 +178,44 @@ if __name__ == "__main__":
                 args_dict["sketch_padding"] = 6 # params 272378 -> 272384 = 2^11 × 7 × 19
             elif args.ID_dataset == "CIFAR-100":
                 args_dict["sketch_padding"] = 12 # params 278228 -> 278240 = 2^5 × 5 × 37 × 47
-            
+        elif args.model == "ResNet50":
+            if args.ID_dataset in ["CelebA"]:
+                args_dict["sketch_padding"] = 11 # params 5327857 -> 5327868 = 2^2 × 3 × 7^2 × 13 × 17 × 41
 
     if args.score == "ensemble":
         params_dicts_list = [params_dict]
-        for i in range(1, args.ensemble_size):
+        for i in range(args.model_seed + 1, args.model_seed + args.ensemble_size):
             _, params_dict , _= load_pretrained_model(
                 dataset_name = args.ID_dataset,
                 model_name = args.model,
                 run_name = args.run_name,
-                seed = args.model_seed + i,
+                seed = i,
                 save_path = args.model_save_path
             )
             params_dicts_list.append(params_dict)
         score_fun = ensemble_score_fun(model, params_dicts_list)
         eigenval = []
-        quadratic_form_true, quadratic_form_fake = None, None
+        approx_quadratic_form, quadratic_form = None, None
     elif args.score == "diagonal_lla":
-        score_fun, ggn_quadratic_form, approx_ggn_quadratic_form = diagonal_lla_score_fun(model, params_dict, train_loader, args_dict)
+        score_fun, quadratic_form, approx_quadratic_form = diagonal_lla_score_fun(model, params_dict, train_loader, args_dict)
         eigenval = []
     elif args.score == "scod":
         args_dict['use_eigenvals'] = True
-        score_fun, eigenval, approx_ggn_quadratic_form = scod_score_fun(model, params_dict, train_loader, args_dict, use_eigenvals=True)
+        score_fun, eigenval, approx_quadratic_form = scod_score_fun(model, params_dict, train_loader, args_dict, use_eigenvals=True)
+        quadratic_form = None
+    elif args.score == "swag":
+        score_fun, _, _ = swag_score_fun(
+            model, params_dict, train_loader, args_dict,
+            #diag_only=False, max_num_models=10, swa_c_epochs=1, swa_c_batches=None,
+            diag_only = args_dict['swag_diag_only'], 
+            max_num_models = args_dict['swag_n_vec'], 
+            swa_c_epochs = None, swa_c_batches = args_dict['swag_collect_interval'],
+            swa_lr = args_dict['swag_lr'], 
+            momentum = args_dict['swag_momentum'], 
+            wd=0.0 #1e-6
+        )
+        eigenval = []
+        approx_quadratic_form, quadratic_form = None, None
     else:
         if args_dict['lanczos_hm_iter']==0:
             # low memory lanczos methods
@@ -283,6 +307,10 @@ if __name__ == "__main__":
         experiment_name += f"diagonal_lla_sample{args.hutchinson_samples}"
     elif args.score == "scod":
         experiment_name += f"scod_HMsize{args.n_eigenvec_hm}"
+    elif args.score == "swag":
+        experiment_name += f"swag_vec{args.swag_n_vec}_mom{args.swag_momentum}_collect{args.swag_collect_interval}"
+        if args.swag_diag_only:
+            experiment_name += "_diag"
     else:
         if args.use_eigenvals:
             experiment_name += "eig_"

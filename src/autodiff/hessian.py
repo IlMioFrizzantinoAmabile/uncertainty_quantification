@@ -6,7 +6,7 @@ from jax import flatten_util
 
 from src.models.utils import has_batchstats
 
-from src.training.loss import log_gaussian_log_loss, cross_entropy_loss
+from src.training.loss import log_gaussian_log_loss, cross_entropy_loss, multiclass_binary_cross_entropy_loss
 
 
 ###################
@@ -27,6 +27,8 @@ def get_hessian_vector_product(
         negative_log_likelihood = log_gaussian_log_loss
     elif likelihood_type == "classification":
         negative_log_likelihood = cross_entropy_loss
+    elif likelihood_type == "binary_multiclassification":
+        negative_log_likelihood = multiclass_binary_cross_entropy_loss
     else:
         raise ValueError(f"Likelihood {likelihood_type} not supported. Use either 'regression' or 'classification'.")
     
@@ -74,7 +76,7 @@ def get_sqrt_hessian_loss_explicit(params_dict, model, likelihood_type = "regres
             mutable=False
         )
 
-    if likelihood_type == "regression":
+    if likelihood_type == "regression" or likelihood_type == "binary_multiclassification":
         if output_dim is None:
             @jax.jit
             def sqrt_hessian_loss(query_data):
