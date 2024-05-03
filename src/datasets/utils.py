@@ -106,7 +106,7 @@ def get_output_dim(dataset_name):
     if dataset_name in ["Sinusoidal", "UCI"]:
         return 1 
     elif dataset_name == "CelebA":
-        return 6 #40
+        return 17 #26 #6 #40
     elif dataset_name == "CIFAR-100":
         return 100
     else:

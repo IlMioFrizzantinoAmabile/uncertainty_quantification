@@ -1,4 +1,11 @@
 /virtualenv
-src/datasets/__pycache__
+/logs
 src/autodiff/__pycache__
+src/datasets/__pycache__
+src/estimators/__pycache__
+src/lanczos/__pycache__
+src/models/__pycache__
+src/ood_scores/__pycache__
+src/sketches/__pycache__
+src/training/__pycache__
 bash

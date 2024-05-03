@@ -6,9 +6,7 @@ import optax
 import time
 import tqdm
 
-from src.models.resnet import ResNet
-from src.models.googlenet import GoogleNet
-from src.models import compute_num_params, compute_norm_params
+from src.models import compute_num_params, compute_norm_params, has_batchstats
 from src.training.loss import calculate_loss_without_batchstats, calculate_loss_with_batchstats
 
 
@@ -37,7 +35,7 @@ def maximum_a_posteriori(
     ################################
     # init model and loss function #
     key = jax.random.PRNGKey(args_dict["seed"])
-    if not (isinstance(model, ResNet) or isinstance(model, GoogleNet)):
+    if not (has_batchstats(model)):
         model_has_batch_stats = False
         params_dict = {
             'params' : model.init(key, x_init),
@@ -47,6 +45,12 @@ def maximum_a_posteriori(
         model_has_batch_stats = True
         params_dict =  model.init(key, x_init, train=True)
     print(f"Model has {compute_num_params(params_dict['params'])} parameters")
+
+
+    if args_dict["likelihood"] in ["classification", "binary_multiclassification"]: #only used for prints
+        acc_label = "accuracy"
+    elif args_dict["likelihood"] == "regression":
+        acc_label = "mse"
 
     ##################
     # init optimizer #
@@ -137,7 +141,8 @@ def maximum_a_posteriori(
         "acc_or_mse": [] }
     print("Starting training...")
     for epoch in range(1, args_dict["n_epochs"] + 1):
-        loss, acc_or_sse = 0., 0.
+        loss = 0.
+        acc_or_sse = 0. if args_dict["likelihood"] != "binary_multiclassification" else jnp.zeros((y_init.shape[1], ))
         start_time = time.time()
         train_loader_bar = tqdm.tqdm(train_loader) if args_dict["verbose"] else train_loader
         for batch in train_loader_bar:
@@ -150,16 +155,15 @@ def maximum_a_posteriori(
             acc_or_sse += batch_acc_or_sse/X.shape[0]
 
             if args_dict["verbose"]:
-                train_loader_bar.set_description(f"Epoch {epoch}/{args_dict['n_epochs']}, batch loss = {batch_loss.item():.2f}, accuracy = {batch_acc_or_sse/X.shape[0]:.2f}")
+                formatted_batch_acc = f"{batch_acc_or_sse/X.shape[0]:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.2f}" for a in batch_acc_or_sse/X.shape[0]]
+                train_loader_bar.set_description(f"Epoch {epoch}/{args_dict['n_epochs']}, batch loss = {batch_loss.item():.2f}, {acc_label} = {formatted_batch_acc}")
     
         acc_or_sse /= len(train_loader)
         loss /= len(train_loader)
         params_norm = compute_norm_params(params_dict['params'])
         batch_sats_norm = compute_norm_params(params_dict['batch_stats'])
-        if args_dict["likelihood"] in ["classification", "binary_multiclassification"]:
-            print(f"epoch={epoch} averages - loss={loss:.2f}, params norm={params_norm:.2f}, batch_stats norm={batch_sats_norm:.2f}, accuracy={acc_or_sse:.3f}, time={time.time() - start_time:.3f}s")
-        elif args_dict["likelihood"] == "regression":
-            print(f"epoch={epoch} averages - loss={loss:.2f}, params norm={params_norm:.2f}, batch_stats norm={batch_sats_norm:.2f}, mse={acc_or_sse:.3f}, time={time.time() - start_time:.3f}s")
+        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.3f}" for a in acc_or_sse]
+        print(f"epoch={epoch} averages - loss={loss:.2f}, params norm={params_norm:.2f}, batch_stats norm={batch_sats_norm:.2f}, {acc_label}={acc_or_sse_formatted}, time={time.time() - start_time:.3f}s")
         epoch_stats_dict["loss"].append(loss)
         epoch_stats_dict["acc_or_mse"].append(acc_or_sse)
         epoch_stats_dict["params_norm"].append(params_norm)
@@ -169,7 +173,8 @@ def maximum_a_posteriori(
             continue
 
         def get_precise_stats(loader):
-            loss, acc_or_sse = 0., 0.
+            loss = 0.
+            acc_or_sse = 0. if args_dict["likelihood"] != "binary_multiclassification" else jnp.zeros((y_init.shape[1], ))
             start_time = time.time()
             for batch in loader:
                 X = jnp.array(batch[0].numpy())
@@ -199,18 +204,14 @@ def maximum_a_posteriori(
             return loss, acc_or_sse, time.time() - start_time
 
         loss, acc_or_sse, duration = get_precise_stats(train_loader)
-        if args_dict["likelihood"] in ["classification", "binary_multiclassification"]:
-            print(f"Train stats\t - loss={loss:.3f}, accuracy={acc_or_sse:.3f}, time={duration:.3f}s")
-        elif args_dict["likelihood"] == "regression":
-            print(f"Train stats\t - loss={loss:.3f}, mse={acc_or_sse:.3f}, time={duration:.3f}s")
+        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.3f}" for a in acc_or_sse]
+        print(f"Train stats\t - loss={loss:.3f}, {acc_label}={acc_or_sse_formatted}, time={duration:.3f}s")
         train_stats_dict["loss"].append(loss)
         train_stats_dict["acc_or_mse"].append(acc_or_sse)
 
         loss, acc_or_sse, duration = get_precise_stats(valid_loader)
-        if args_dict["likelihood"] in ["classification", "binary_multiclassification"]:
-            print(f"Validation stats - loss={loss:.3f} accuracy={acc_or_sse:.3f}, time={duration:.3f}s")
-        elif args_dict["likelihood"] == "regression":
-            print(f"Validation stats - loss={loss:.3f}, mse={acc_or_sse:.3f} time={duration:.3f}s")
+        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.3f}" for a in acc_or_sse]
+        print(f"Validation stats - loss={loss:.3f}, {acc_label}={acc_or_sse_formatted} time={duration:.3f}s")
         valid_stats_dict["loss"].append(loss)
         valid_stats_dict["acc_or_mse"].append(acc_or_sse)
 

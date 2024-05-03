@@ -14,7 +14,8 @@ def log_determinant_ntk(
     params_dict, 
     x, 
     dim: int,
-    prior: float = 1.,
+    prior_precision: float = 1.,
+    lik_precision: float = 1.,
     likelihood: Literal["classification", "regression", "binary_multiclassification"] = "classification",
     sequential = True,
     n_samples: int = None,
@@ -29,7 +30,7 @@ def log_determinant_ntk(
         single_datapoint = False,
         likelihood_type = likelihood
     )
-    ntk_plus_prior_vector_product = lambda v: ntk_vector_product(v) + prior*v
+    ntk_plus_prior_vector_product = lambda v: (1./prior_precision) * ntk_vector_product(v) + (1./lik_precision) * v
     jit_vp = jax.jit(ntk_plus_prior_vector_product)
 
     start = time.time()
@@ -56,7 +57,8 @@ def log_determinant_ggn(
     params_dict, 
     x, 
     dim: int,
-    prior: float = 1.,
+    prior_precision: float = 1.,
+    lik_precision: float = 1.,
     likelihood: Literal["classification", "regression", "binary_multiclassification"] = "classification",
     sequential = True,
     n_samples: int = None,
@@ -71,7 +73,7 @@ def log_determinant_ggn(
         single_datapoint = False,
         likelihood_type = likelihood
     )
-    ggn_plus_prior_vector_product = lambda v: ggn_vector_product(v) + prior*v
+    ggn_plus_prior_vector_product = lambda v: lik_precision * ggn_vector_product(v) + prior_precision * v
     jit_vp = jax.jit(ggn_plus_prior_vector_product)
 
     start = time.time()

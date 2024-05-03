@@ -73,7 +73,8 @@ def calculate_loss_with_batchstats(
         return loss, (acc, new_model_state)
     elif likelihood == "binary_multiclassification":
         num_classes = preds.shape[1]
-        acc = jnp.sum((preds>0.) == (y==1)) / num_classes
+        #acc = jnp.sum((preds>0.) == (y==1)) / num_classes
+        acc = jnp.sum((preds>0.) == (y==1), axis=0)
         return loss, (acc, new_model_state)
 
 
@@ -104,5 +105,6 @@ def calculate_loss_without_batchstats(
         return loss, (acc, )
     elif likelihood == "binary_multiclassification":
         num_classes = preds.shape[1]
-        acc = jnp.sum((preds>0.) == (y==1)) / num_classes
+        #acc = jnp.sum((preds>0.) == (y==1)) / num_classes
+        acc = jnp.sum((preds>0.) == (y==1), axis=0)
         return loss, (acc, )

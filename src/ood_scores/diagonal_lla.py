@@ -10,7 +10,8 @@ import time
 
 
 def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
-    data_array = jnp.array([data[0] for data in train_loader.dataset])
+    #data_array = jnp.array([data[0] for data in train_loader.dataset])
+    data_array = jnp.array([train_loader.dataset[i][0] for i in range(int(0.9*args_dict["subsample_trainset"]))])
     prior_scale = 1. / (2 * len(data_array) * args_dict['prior_std']**2) 
     n_params = compute_num_params(params_dict["params"])
 
@@ -44,7 +45,7 @@ def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
         n_params,
         sequential = True,
         n_samples = args_dict["hutchinson_samples"],
-        key = jax.random.PRNGKey(args_dict["seed"]),
+        key = jax.random.PRNGKey(args_dict["hutchinson_seed"]),
         estimator = "Rademacher"
     ) # for reference: MNIST full dataset on Lenet takes around 7 second every 100 samples (vector products) -> exact diagonal ggn takes around 1 hour
     print(f"ggn diagonal, dataset size {len(data_array)}, with {n_params} params model -> took {time.time()-start:.3f} seconds")
@@ -52,7 +53,7 @@ def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
     if min_value < 0:
         ggn_diagonal -= jnp.min(ggn_diagonal)
         ggn_diagonal += 1e-3
-        print("Min is negative :(")
+        print(f"Min is negative :( - {min_value}")
 
     # define the GGN vector product with the diagnal approx
     @jax.jit

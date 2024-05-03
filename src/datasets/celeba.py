@@ -6,24 +6,54 @@ import pandas
 from PIL import Image
 from src.datasets.utils import get_loader, get_subset_data
 
-easy_targets = [
-    'Arched_Eyebrows', 'Bushy_Eyebrows', 
-    'Bags_Under_Eyes', 'Eyeglasses', 'Narrow_Eyes', 'Big_Lips', 'Big_Nose', 
-    'Bald', 'Receding_Hairline', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 'Gray_Hair', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Hat', 
-    'Double_Chin', 'Mouth_Slightly_Open', 'Mustache', 'No_Beard',
-    'Pale_Skin', 'Rosy_Cheeks', 'Wearing_Earrings', 'Wearing_Lipstick', 'Wearing_Necklace', 'Wearing_Necktie'
+all_targets = ['5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes',
+       'Bald', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair',
+       'Blurry', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin',
+       'Eyeglasses', 'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'High_Cheekbones',
+       'Male', 'Mouth_Slightly_Open', 'Mustache', 'Narrow_Eyes', 'No_Beard',
+       'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline',
+       'Rosy_Cheeks', 'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair',
+       'Wearing_Earrings', 'Wearing_Hat', 'Wearing_Lipstick',
+       'Wearing_Necklace', 'Wearing_Necktie', 'Young'
+       ]
+all_targets = ['5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes',
+       'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair',
+       'Blurry', 'Brown_Hair', 'Bushy_Eyebrows', 'Chubby', 'Double_Chin',
+       'Goatee', 'Gray_Hair', 'Heavy_Makeup', 'High_Cheekbones',
+       'Male', 'Mouth_Slightly_Open', 'Narrow_Eyes', 'No_Beard',
+       'Oval_Face', 'Pale_Skin', 'Pointy_Nose', 'Receding_Hairline',
+       'Rosy_Cheeks', 'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair',
+       'Wearing_Earrings', 'Wearing_Hat', 'Wearing_Lipstick',
+       'Wearing_Necklace', 'Wearing_Necktie', 'Young'
+       ]
+
+
+#targets with occurrence between 10% and 90%  (18 classes)
+decent_targets = [
+    '5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eyes', 'Bangs', 'Big_Lips', 'Big_Nose', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 
+    'Bushy_Eyebrows', 'Heavy_Makeup', 'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Narrow_Eyes', 'No_Beard', 'Oval_Face', 'Pointy_Nose', 'Smiling', 
+    'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Lipstick', 'Wearing_Necklace', 'Young'
 ]
 
-#targets with occurrence between 40% and 60%
+#targets with occurrence between 20% and 80%  (17 classes)
+easy_targets = [
+    'Arched_Eyebrows', 'Attractive', 'Big_Lips', 'Black_Hair', 'Brown_Hair', 
+    'Heavy_Makeup', 'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Oval_Face', 'Pointy_Nose', 'Smiling', 
+    'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Lipstick', 'Young'
+]
+
+
+#targets with occurrence between 40% and 60%  (6 classes)
 balanced_targets = [
-    'Attractive', 'High_Cheekbones', 'Male', 'Mouth_Slightly_Open', 'Smiling', 'Wearing_Lipstick'
+    'Attractive', 'Heavy_Makeup', 'High_Cheekbones', 'Mouth_Slightly_Open', 'Smiling', 'Wearing_Lipstick'
 ]
 
 class CelebA(torch.utils.data.Dataset):
     def __init__(
         self, 
         transform=None, 
-        cls: list = list(range(40)), 
+        only_with: list = [], 
+        only_without: list = ['Bald', 'Mustache', 'Eyeglasses'], 
         download=False,
         data_path="../datasets", 
     ):
@@ -34,17 +64,32 @@ class CelebA(torch.utils.data.Dataset):
         self.root = os.path.join(data_path, "celeba")
         self.transform = transform
         self.image_path = os.path.join(self.root, "img_align_celeba/img_align_celeba")
-        self.image_file_names = os.listdir(self.image_path)
+        #self.image_file_names = os.listdir(self.image_path)
         self.target_path = os.path.join(self.root, "list_attr_celeba.csv")
         dataframe = pandas.read_csv(self.target_path)
         self.target_dataframe = dataframe.loc[:, dataframe.columns != 'image_id']
-        self.target_dataframe = self.target_dataframe.loc[:, balanced_targets]
-        for column in self.target_dataframe.columns:
-            occurrences = self.target_dataframe[column].value_counts()
-            #print(f" target {column}: {occurrences[1]} yes,  {occurrences[-1]} no")
-            print(f" {100*occurrences[1]/(occurrences[1]+occurrences[-1]):.3f}% of datapoints has target {column}")
-        self.ids = dataframe.loc[:, 'image_id'].to_numpy()
-        print(f"Possible targets are: {self.target_dataframe.columns}, --- {len(self.target_dataframe.keys())}")
+        #self.target_dataframe = self.target_dataframe.loc[self.target_dataframe['Mustache'] == 1]
+        for class_with in only_with:
+            self.target_dataframe = self.target_dataframe.loc[self.target_dataframe[class_with] == 1]
+        for class_without in only_without:
+            self.target_dataframe = self.target_dataframe.loc[self.target_dataframe[class_without] == -1]
+        indexes = self.target_dataframe.index
+
+        self.ids = dataframe.loc[indexes, 'image_id'].to_numpy()
+
+        #self.target_dataframe = self.target_dataframe.loc[:, all_targets]
+        #self.target_dataframe = self.target_dataframe.loc[:, decent_targets]
+        self.target_dataframe = self.target_dataframe.loc[:, easy_targets]
+        #self.target_dataframe = self.target_dataframe.loc[:, balanced_targets]
+        if False:
+            for column in self.target_dataframe.columns:
+                occurrences = self.target_dataframe[column].value_counts()
+                for i in [-1,1]:
+                    if i not in occurrences.keys():
+                        occurrences[i] = 0
+                #print(f" target {column}: {occurrences[1]} yes,  {occurrences[-1]} no")
+                print(f" {100*occurrences[1]/(occurrences[1]+occurrences[-1]):.3f}% of datapoints has target {column}")
+        #print(f"Possible targets are: {self.target_dataframe.columns}, --- {len(self.target_dataframe.keys())}")
         #print(f"There are {len(self.image_file_names)} images and {len(self.ids)} targets")
 
         self.mean = np.ones((3, 218, 178))
@@ -69,7 +114,8 @@ class CelebA(torch.utils.data.Dataset):
                     print(f"Ahia -> {index} {self.ids[index]}")
         
     def __len__(self):
-        return len(self.image_file_names)
+        #return len(self.image_file_names)
+        return len(self.ids)
     
     def __getitem__(self, index):
         image_id = self.ids[index]
@@ -163,3 +209,27 @@ def get_celeba_augmented(
         seed=seed
     )
     return train_loader, valid_loader, test_loader
+
+
+def get_celeba_ood(
+        batch_size = 128,
+        shuffle = False,
+        only_with: str = 'Bald',
+        seed = 0,
+        download: bool = False,
+        data_path="../datasets",
+    ):
+    dataset = CelebA(
+        only_with = [only_with], 
+        only_without = [], 
+        download=download, 
+        data_path=data_path, 
+    )
+    test_loader = get_loader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=True,
+        seed=seed
+    )
+    return None, None, test_loader

@@ -6,7 +6,7 @@ import datetime
 from flax import linen as nn
 
 from src.datasets import get_train_loaders, get_output_dim
-from src.models import MLP, LeNet, GoogleNet, ResNet, ResNetBlock, PreActResNetBlock
+from src.models import MLP, LeNet, GoogleNet, ConvNeXt, ResNet, ResNetBlock, PreActResNetBlock, ResNet_NoNormalization
 
 from src.training.minimizer import maximum_a_posteriori
 from src.training.minimizer_with_reg import maximum_a_posteriori_with_reg
@@ -20,7 +20,7 @@ parser.add_argument("--n_samples", default=None, type=int, help="Number of datap
 parser.add_argument("--uci_type", type=str, choices=["concrete", "boston", "energy", "kin8nm", "wine", "yacht"], default=None)
 
 # model hyperparams
-parser.add_argument("--model", type=str, choices=["MLP", "LeNet", "GoogleNet", "ResNet", "ResNet50", "ResNet50PreAct"], default="MLP", help="Model architecture.")
+parser.add_argument("--model", type=str, choices=["MLP", "LeNet", "GoogleNet", "ConvNeXt", "ConvNeXt_L", "ConvNeXt_XL", "ResNet", "ResNet_NoNorm", "ResNet50", "ResNet50PreAct"], default="MLP", help="Model architecture.")
 parser.add_argument("--activation_fun", type=str, choices=["tanh", "relu"], default="tanh", help="Model activation function.")
 parser.add_argument("--mlp_hidden_dim", default=20, type=int, help="Hidden dims of the MLP.")
 parser.add_argument("--mlp_num_layers", default=1, type=int, help="Number of layers in the MLP.")
@@ -41,6 +41,10 @@ parser.add_argument("--default_hyperparams", action="store_true", required=False
 # extra regularizer
 parser.add_argument("--regularizer", type=str, choices=["log_determinant_ggn", "log_determinant_ntk"], default=None)
 parser.add_argument("--regularizer_hutch_samples", type=int, default=10)
+parser.add_argument("--regularizer_prec_prior", type=float, default=1.)
+parser.add_argument("--regularizer_prec_lik", type=float, default=1.)
+parser.add_argument("--n_warmup_epochs", type=int, default=0)
+
 
 # storage
 parser.add_argument("--run_name", default=None, help="Fix the save file name. If None it's set to starting time")
@@ -79,7 +83,15 @@ if __name__ == "__main__":
             args_dict["momentum"] = None
             args_dict["weight_decay"] = 1e-4
             args_dict["activation_fun"] = "relu"
-        elif args.model == "ResNet":
+        elif args.model == "ConvNeXt" or args.model == "ConvNeXt_L" or args.model == "ConvNeXt_XL":
+            args_dict["n_epochs"] = 200
+            args_dict["batch_size"] = 128
+            args_dict["optimizer"] = "sgd" #"adamw"
+            args_dict["learning_rate"] = 0.1 #1e-3
+            args_dict["decrease_learning_rate"] = True
+            args_dict["momentum"] = 0.9 #None
+            args_dict["weight_decay"] = 1e-4
+        elif args.model == "ResNet" or args.model == "ResNet_NoNorm":
             args_dict["n_epochs"] = 200
             args_dict["batch_size"] = 128
             args_dict["optimizer"] = "sgd"
@@ -89,10 +101,10 @@ if __name__ == "__main__":
             args_dict["weight_decay"] = 1e-4
             args_dict["activation_fun"] = "relu"
         elif args.model == "ResNet50":
-            args_dict["n_epochs"] = 2
-            args_dict["batch_size"] = 128
+            args_dict["n_epochs"] = 2 #10
+            args_dict["batch_size"] = 128 #64 #128
             args_dict["optimizer"] = "sgd"
-            args_dict["learning_rate"] = 0.0001
+            args_dict["learning_rate"] = 1e-5 #0.0001
             args_dict["decrease_learning_rate"] = True
             args_dict["momentum"] = 0.9
             args_dict["weight_decay"] = 1e-4
@@ -118,7 +130,6 @@ if __name__ == "__main__":
     args_dict["output_dim"] = output_dim
     act_fn = getattr(nn, args_dict["activation_fun"])
 
-    have_batch_stats = False
     if args.model == "MLP":
         model = MLP(
             output_dim = output_dim, 
@@ -136,6 +147,33 @@ if __name__ == "__main__":
             output_dim = output_dim,
             act_fn = act_fn
         )
+    elif args.model == "ConvNeXt":
+        model = ConvNeXt(
+            depths = (3, 3, 9, 3),
+            dims = (16, 32, 64, 128), #(96, 192, 384, 768),
+            drop_path = 0.0,
+            attach_head = True,
+            num_classes = output_dim,
+            deterministic = True
+        )
+    elif args.model == "ConvNeXt_L":
+        model = ConvNeXt(
+            depths = (3, 3, 9, 3),
+            dims = (32, 64, 128, 256),
+            drop_path = 0.0,
+            attach_head = True,
+            num_classes = output_dim,
+            deterministic = True
+        )
+    elif args.model == "ConvNeXt_XL":
+        model = ConvNeXt(
+            depths = (3, 3, 27, 3),
+            dims = (128, 256, 512, 1024),
+            drop_path = 0.0,
+            attach_head = True,
+            num_classes = output_dim,
+            deterministic = True
+        )
     elif args.model == "ResNet":
         model = ResNet(
             output_dim = output_dim,
@@ -143,6 +181,13 @@ if __name__ == "__main__":
             num_blocks = (3, 3, 3),
             act_fn = act_fn,
             block_class = ResNetBlock
+        )
+    elif args.model == "ResNet_NoNorm":
+        model = ResNet_NoNormalization(
+            output_dim = output_dim,
+            c_hidden =(16, 32, 64),
+            num_blocks = (3, 3, 3),
+            act_fn = act_fn
         )
     elif args.model == "ResNet50":
         model = ResNet(

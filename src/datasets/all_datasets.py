@@ -8,7 +8,7 @@ from src.datasets.fmnist import FashionMNIST, get_fmnist, get_rotated_fmnist
 from src.datasets.cifar10 import CIFAR10, get_cifar10, get_cifar10_augmented, get_cifar10_corrupted
 from src.datasets.cifar100 import CIFAR100, get_cifar100, get_cifar100_augmented
 from src.datasets.svhn import SVHN, get_svhn, get_svhn_augmented
-from src.datasets.celeba import CelebA, get_celeba, get_celeba_augmented
+from src.datasets.celeba import CelebA, get_celeba, get_celeba_augmented, get_celeba_ood
 
 def get_train_loaders(
         dataset_name,
@@ -110,9 +110,9 @@ def get_test_loaders(
         seed: int = 0,
         download: bool = False,
         data_path: str = "../datasets",
-        angle: float = 0,           # for rotated datasets
-        corr_type: str = "fog",     # for corrupted datasets
-        severity_level: int = 5,    # for corrupted datasets
+        angle: float = 0,               # for rotated datasets
+        corr_type: str = "fog",         # for corrupted datasets
+        severity_level: int = 5,        # for corrupted datasets
     ):
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(seed)
@@ -251,8 +251,18 @@ def get_test_loaders(
             data_path = data_path
         )
     elif dataset_name == "CelebA":
-        classes = list(range(10))
         train_loader, valid_loader, test_loader = get_celeba(
+            batch_size = batch_size, 
+            shuffle = shuffle,
+            seed = seed,
+            download = False, 
+            data_path = data_path
+        )
+    elif dataset_name.startswith("CelebA-"):
+        only_with = dataset_name.removeprefix("CelebA-")
+        print(f"Loading CelebA only with {only_with}")
+        train_loader, valid_loader, test_loader = get_celeba_ood(
+            only_with = only_with,
             batch_size = batch_size, 
             shuffle = shuffle,
             seed = seed,

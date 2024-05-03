@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import torch
+import time
 from src.models import compute_num_params
 from src.autodiff.hessian import get_sqrt_hessian_loss_explicit
 from src.autodiff.jacobian import get_jacobian_vector_product, get_jacobianT_vector_product, get_jacobian_explicit
 from src.estimators.frobenius import get_frobenius_norm
 from src.sketches import SRFTSymSketch
-import time
 
 
 def scod_score_fun(
@@ -18,7 +18,8 @@ def scod_score_fun(
         use_eigenvals : bool = True, 
         gpu : bool = True
     ):
-    data_array = jnp.array([data[0] for data in train_loader.dataset])
+    #data_array = jnp.array([data[0] for data in train_loader.dataset])
+    data_array = jnp.array([train_loader.dataset[i][0] for i in range(int(0.9*args_dict["subsample_trainset"]))])
     prior_scale = 1. / (2 * len(data_array) * args_dict['prior_std']**2) 
     n_params = compute_num_params(params_dict["params"])
 
@@ -34,14 +35,14 @@ def scod_score_fun(
         hess = hessian_loss_fun(datapoint)
         hess_jac = hess @ jac
         #print(hess.shape, jac.shape, hess_jac.shape)
-        hess_jac = torch.from_numpy(np.array(hess_jac))
+        hess_jac = torch.from_numpy(np.asarray(hess_jac))
         sketch.low_rank_update(0, hess_jac.T, 1.0)
     print(f"Updates took {time.time()-start} seconds")
 
     start = time.time()
     eigenval, eigenvec = sketch.get_range_basis()
-    eigenval = jnp.array(eigenval[-args_dict['n_eigenvec_hm']:])
-    eigenvec = jnp.array(eigenvec[:, -args_dict['n_eigenvec_hm']:])
+    eigenval = jnp.asarray(eigenval[-args_dict['n_eigenvec_hm']:])
+    eigenvec = jnp.asarray(eigenvec[:, -args_dict['n_eigenvec_hm']:])
     print(eigenvec.shape, eigenval.shape)
     print(f"Getting eigenvec/eigenval took {time.time()-start} seconds")
     print(f"returned {len(eigenval)} eigenvals  = {eigenval[:5]} ... {eigenval[-5:]}")
