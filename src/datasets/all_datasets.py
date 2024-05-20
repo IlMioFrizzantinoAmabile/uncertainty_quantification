@@ -8,6 +8,7 @@ from src.datasets.fmnist import FashionMNIST, get_fmnist, get_rotated_fmnist
 from src.datasets.cifar10 import CIFAR10, get_cifar10, get_cifar10_augmented, get_cifar10_corrupted
 from src.datasets.cifar100 import CIFAR100, get_cifar100, get_cifar100_augmented
 from src.datasets.svhn import SVHN, get_svhn, get_svhn_augmented
+from src.datasets.food101 import FOOD101, get_food101_scaled
 from src.datasets.celeba import CelebA, get_celeba, get_celeba_augmented, get_celeba_ood
 
 def get_train_loaders(
@@ -246,6 +247,15 @@ def get_test_loaders(
             shuffle = shuffle,
             n_samples_per_class = int(n_samples/10) if n_samples is not None else None,
             classes = classes,
+            seed = seed,
+            download = download, 
+            data_path = data_path
+        )
+    elif dataset_name == "FOOD101":
+        train_loader, valid_loader, test_loader = get_food101_scaled(
+            batch_size = batch_size, 
+            shuffle = shuffle,
+            n_samples_per_class = None,
             seed = seed,
             download = download, 
             data_path = data_path
