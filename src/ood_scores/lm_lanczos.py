@@ -19,7 +19,7 @@ def low_memory_lanczos_score_fun(
         use_eigenvals : bool = True
     ):
     #data_array = jnp.array([data[0] for data in train_loader.dataset])
-    data_array = jnp.array([train_loader.dataset[i][0] for i in range(int(0.9*args_dict["subsample_trainset"]))])
+    data_array = jnp.asarray([train_loader.dataset[i][0] for i in range(int(0.9*args_dict["subsample_trainset"]))])
     prior_scale = 1. / (2 * len(data_array) * args_dict['prior_std']**2) 
     n_params = compute_num_params(params_dict["params"])
 
@@ -36,7 +36,7 @@ def low_memory_lanczos_score_fun(
         ggn_vector_product = get_hessian_vector_product(
                 params_dict,
                 model,
-                data_array = (data_array, jnp.array([data[1] for data in train_loader.dataset])),
+                data_array = (data_array, jnp.asarray([data[1] for data in train_loader.dataset])),
                 likelihood_type = args_dict["likelihood"]
         )
     start = time.time()
@@ -77,8 +77,8 @@ def low_memory_lanczos_score_fun(
     else:
         eigenvec = U
         eigenval = S
-    eigenvec = jnp.array(eigenvec)
-    eigenval = jnp.array(eigenval)
+    eigenvec = jnp.asarray(eigenvec)
+    eigenval = jnp.asarray(eigenval)
     print(f"PCA took {time.time()-start:.3f} seconds")
 
     # define the GGN vector product with the eigenvec decomposition, and its inverse and inverse sqrt

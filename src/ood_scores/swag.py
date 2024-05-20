@@ -69,7 +69,7 @@ def swag_score_fun(
     
     def fit_batch_stats(train_loader, params_dict):
         for batch in train_loader:
-            X = jnp.array(batch[0].numpy())
+            X = jnp.asarray(batch[0].numpy())
             _, new_model_state = model.apply(
                 params_dict,
                 X,
@@ -138,8 +138,8 @@ def swag_score_fun(
         batches_bar = tqdm.tqdm(enumerate(train_loader))
         for batch_idx, batch in batches_bar:
         #for batch_idx, batch in enumerate(train_loader):
-            X = jnp.array(batch[0].numpy())
-            Y = jnp.array(batch[1].numpy())
+            X = jnp.asarray(batch[0].numpy())
+            Y = jnp.asarray(batch[1].numpy())
 
             opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y)
 
@@ -158,7 +158,7 @@ def swag_score_fun(
     
     print(f"Models collection took {time.time()-start} seconds")
 
-    cov_mat_sqrt = jnp.array(cov_mat_sqrt)
+    cov_mat_sqrt = jnp.asarray(cov_mat_sqrt)
     cov_mat_sqrt = cov_mat_sqrt.transpose()
     print("Covariance matrix done, shape", cov_mat_sqrt.shape)
 
@@ -210,7 +210,7 @@ def swag_score_fun(
                     mutable=False
                 )
             preds.append(pred)
-        preds = jnp.array(preds)
+        preds = jnp.asarray(preds)
         return preds.var(axis=0).sum(axis=-1)
     
     
