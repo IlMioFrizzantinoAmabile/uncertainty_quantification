@@ -3,13 +3,10 @@ import os
 import argparse
 import json
 import datetime
-from flax import linen as nn
 
-from src.datasets import get_train_loaders, get_output_dim
-from src.models import MLP, LeNet, GoogleNet, ConvNeXt, ResNet, ResNetBlock, PreActResNetBlock, ResNet_NoNormalization
-
-from src.training.minimizer import maximum_a_posteriori
-from src.training.minimizer_with_reg import maximum_a_posteriori_with_reg
+from src.datasets import augmented_dataloader_from_string, get_output_dim
+from src.models import model_from_string, pretrained_model_from_string
+from src.training.trainer import gradient_descent
 
 
 parser = argparse.ArgumentParser()
@@ -20,7 +17,7 @@ parser.add_argument("--n_samples", default=None, type=int, help="Number of datap
 parser.add_argument("--uci_type", type=str, choices=["concrete", "boston", "energy", "kin8nm", "wine", "yacht"], default=None)
 
 # model hyperparams
-parser.add_argument("--model", type=str, choices=["MLP", "LeNet", "GoogleNet", "ConvNeXt", "ConvNeXt_L", "ConvNeXt_XL", "ResNet", "ResNet_NoNorm", "ResNet50", "ResNet50PreAct"], default="MLP", help="Model architecture.")
+parser.add_argument("--model", type=str, choices=["MLP", "LeNet", "GoogleNet", "ConvNeXt", "ConvNeXt_L", "ConvNeXt_XL", "ResNet", "ResNet_NoNorm", "ResNet50", "ResNet50PreAct", "VAN_tiny", "VAN_small", "VAN_base", "VAN_large"], default="MLP", help="Model architecture.")
 parser.add_argument("--activation_fun", type=str, choices=["tanh", "relu"], default="tanh", help="Model activation function.")
 parser.add_argument("--mlp_hidden_dim", default=20, type=int, help="Hidden dims of the MLP.")
 parser.add_argument("--mlp_num_layers", default=1, type=int, help="Number of layers in the MLP.")
@@ -29,7 +26,7 @@ parser.add_argument("--mlp_num_layers", default=1, type=int, help="Number of lay
 parser.add_argument("--seed", default=420, type=int)
 parser.add_argument("--n_epochs", type=int, default=10)
 parser.add_argument("--batch_size", type=int, default=128)
-parser.add_argument("--optimizer", type=str, choices=["sgd", "adam", "rmsprop"], default="adam")
+parser.add_argument("--optimizer", type=str, choices=["sgd", "adam", "adamw", "rmsprop"], default="adam")
 parser.add_argument("--learning_rate", type=float, default=1e-3)
 parser.add_argument("--decrease_learning_rate", action="store_true", required=False, default=False)
 parser.add_argument("--weight_decay", type=float, default=None)
@@ -47,9 +44,10 @@ parser.add_argument("--n_warmup_epochs", type=int, default=0)
 
 
 # storage
-parser.add_argument("--run_name", default=None, help="Fix the save file name. If None it's set to starting time")
+parser.add_argument("--run_name", type=str, default=None, help="Fix the save file name. If None it's set to starting time")
+parser.add_argument("--run_name_pretrained", type=str, default=None, help="Run name from which to load pretrained parameters. If None parameters are randomly initialized")
 parser.add_argument("--model_save_path", type=str, default="../models", help="Root where to save models")
-parser.add_argument("--test_every_n_epoch", type=int, default=20, help="Frequency of coputing validation stats")
+parser.add_argument("--test_every_n_epoch", type=int, default=20, help="Frequency of computing validation stats")
 
 # print more stuff
 parser.add_argument("--verbose", action="store_true", required=False, default=False)
@@ -101,18 +99,26 @@ if __name__ == "__main__":
             args_dict["weight_decay"] = 1e-4
             args_dict["activation_fun"] = "relu"
         elif args.model == "ResNet50":
-            args_dict["n_epochs"] = 2 #10
-            args_dict["batch_size"] = 128 #64 #128
+            args_dict["n_epochs"] = 2
+            args_dict["batch_size"] = 128
             args_dict["optimizer"] = "sgd"
             args_dict["learning_rate"] = 1e-5 #0.0001
             args_dict["decrease_learning_rate"] = True
             args_dict["momentum"] = 0.9
             args_dict["weight_decay"] = 1e-4
             args_dict["activation_fun"] = "relu"
+        #elif args.model == "VAN_tiny" or args.model == "VAN_small":
+            #args_dict["n_epochs"] = 10 
+            #args_dict["batch_size"] = 128 
+            #args_dict["optimizer"] = "adam"
+            #args_dict["learning_rate"] = 1e-5 
+            #args_dict["decrease_learning_rate"] = True
+            #args_dict["momentum"] = 0.9
+            #args_dict["weight_decay"] = 1e-4
 
     ###############
     ### dataset ###
-    train_loader, valid_loader = get_train_loaders(
+    train_loader, valid_loader = augmented_dataloader_from_string(
         args.dataset,
         n_samples = args.n_samples,
         batch_size = args.batch_size,
@@ -127,86 +133,14 @@ if __name__ == "__main__":
     #############
     ### model ###
     output_dim = get_output_dim(args.dataset)
+    model = model_from_string(
+        args.model, 
+        output_dim, 
+        activation_fun = args_dict["activation_fun"],
+        mlp_num_layers = args_dict["mlp_num_layers"],
+        mlp_hidden_dim = args_dict["mlp_hidden_dim"],
+    )
     args_dict["output_dim"] = output_dim
-    act_fn = getattr(nn, args_dict["activation_fun"])
-
-    if args.model == "MLP":
-        model = MLP(
-            output_dim = output_dim, 
-            num_layers = args.mlp_num_layers,
-            hidden_dim = args.mlp_hidden_dim, 
-            act_fn = act_fn
-        )
-    elif args.model == "LeNet":
-        model = LeNet(
-            output_dim = output_dim, 
-            act_fn = act_fn
-        )
-    elif args.model == "GoogleNet":
-        model = GoogleNet(
-            output_dim = output_dim,
-            act_fn = act_fn
-        )
-    elif args.model == "ConvNeXt":
-        model = ConvNeXt(
-            depths = (3, 3, 9, 3),
-            dims = (16, 32, 64, 128), #(96, 192, 384, 768),
-            drop_path = 0.0,
-            attach_head = True,
-            num_classes = output_dim,
-            deterministic = True
-        )
-    elif args.model == "ConvNeXt_L":
-        model = ConvNeXt(
-            depths = (3, 3, 9, 3),
-            dims = (32, 64, 128, 256),
-            drop_path = 0.0,
-            attach_head = True,
-            num_classes = output_dim,
-            deterministic = True
-        )
-    elif args.model == "ConvNeXt_XL":
-        model = ConvNeXt(
-            depths = (3, 3, 27, 3),
-            dims = (128, 256, 512, 1024),
-            drop_path = 0.0,
-            attach_head = True,
-            num_classes = output_dim,
-            deterministic = True
-        )
-    elif args.model == "ResNet":
-        model = ResNet(
-            output_dim = output_dim,
-            c_hidden =(16, 32, 64),
-            num_blocks = (3, 3, 3),
-            act_fn = act_fn,
-            block_class = ResNetBlock
-        )
-    elif args.model == "ResNet_NoNorm":
-        model = ResNet_NoNormalization(
-            output_dim = output_dim,
-            c_hidden =(16, 32, 64),
-            num_blocks = (3, 3, 3),
-            act_fn = act_fn
-        )
-    elif args.model == "ResNet50":
-        model = ResNet(
-            output_dim = output_dim,
-            c_hidden = (32, 64, 128, 256), #(16, 32, 64, 128, 256, 512),
-            num_blocks = (3, 4, 6, 3),
-            act_fn = act_fn,
-            block_class = ResNetBlock
-        )
-    elif args.model == "ResNet50PreAct":
-        model = ResNet(
-            output_dim = output_dim,
-            c_hidden = (32, 64, 128, 256), #(16, 32, 64, 128, 256, 512),
-            num_blocks = (3, 4, 6, 3),
-            act_fn = act_fn,
-            block_class = PreActResNetBlock
-        )
-    else:
-        raise ValueError(f"Model {args.model} is not implemented")
     args_dict["opt_hp"] = {
             "lr": args_dict["learning_rate"],
             "momentum": args_dict["momentum"],
@@ -216,14 +150,22 @@ if __name__ == "__main__":
 
     ################
     ### training ###  
-    if args.regularizer is None:
-        params_dict, stats_dict = maximum_a_posteriori(
-                model, train_loader, valid_loader, args_dict
-            )
-    else:
-        params_dict, stats_dict = maximum_a_posteriori_with_reg(
-                model, train_loader, valid_loader, args_dict
-            )
+    if args.run_name_pretrained is not None:
+        _, pretrained_params_dict, _ = pretrained_model_from_string(
+            model_name = args.model,
+            dataset_name = args.dataset,
+            n_samples = args.n_samples,
+            run_name = args.run_name_pretrained,
+            seed = args.seed,
+            save_path = args.model_save_path
+        )
+    params_dict, stats_dict = gradient_descent(
+            model, 
+            train_loader, 
+            valid_loader, 
+            args_dict,
+            pretrained_params_dict = None if args.run_name_pretrained is None else pretrained_params_dict
+        )
     model_dict = {"model": args.model, **params_dict}
 
 

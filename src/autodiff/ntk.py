@@ -2,8 +2,6 @@ import jax
 import jax.numpy as jnp
 import flax
 
-from src.models.utils import has_batchstats
-
 
 #####################################
 # Neural Tangent Kernel products #
@@ -19,16 +17,11 @@ def get_ntk_vector_product(
         data_array = jnp.expand_dims(data_array, 0)
     B = data_array.shape[0]
     params = params_dict['params']
-    if not has_batchstats(model):
-        model_on_data = lambda p: model.apply(p, data_array)
+    if not model.has_batch_stats:
+        model_on_data = lambda p: model.apply_test(p, data_array)
     else:
         batch_stats = params_dict['batch_stats']
-        model_on_data = lambda p: model.apply(
-                    {'params': p, 'batch_stats': batch_stats}, 
-                    data_array,
-                    train=False,
-                    mutable=False
-                )
+        model_on_data = lambda p, data: model.apply_test(p, batch_stats, data_array)
 
     @jax.jit
     def ntk_vector_product(v):

@@ -33,7 +33,8 @@ def low_memory_lanczos(
 #@partial(jax.jit, static_argnames=['mv_prod', 'dim', 'n_iter'])
 def low_memory_lanczos_to_tridiag(key, mv_prod, dim, n_iter):
     v_old = jax.random.normal(key, shape=(dim, ))
-    v_old /= jnp.sqrt(dim)
+    #v_old /= jnp.sqrt(dim)
+    v_old /= jax.numpy.sqrt(v_old.T @ v_old)
 
     skvs = jnp.zeros((n_iter, v_old.shape[0]))
     skvs = skvs.at[0].set(v_old)
@@ -69,7 +70,8 @@ def low_memory_lanczos_to_tridiag(key, mv_prod, dim, n_iter):
 #@partial(jax.jit, static_argnames=['mv_prod', 'dim', 'n_iter', 'sketch_op'])
 def low_memory_lanczos_to_tridiag_sketch(key, mv_prod, dim, n_iter, sketch_op):
     v_old = jax.random.normal(key, shape=(dim, ))
-    v_old /= jnp.sqrt(dim)
+    #v_old /= jnp.sqrt(dim)
+    v_old /= jax.numpy.sqrt(v_old.T @ v_old)
 
     skv_old = sketch_op @ v_old
     skvs = jnp.zeros((n_iter, skv_old.shape[0]))
@@ -125,7 +127,8 @@ def smart_lanczos(key, mv_prod, dim, n_iter, threshold=0.5, sketch_op=None):
 #@partial(jax.jit, static_argnames=['mv_prod', 'dim', 'n_iter', 'sketch_op'])
 def smart_lanczos_to_tridiag_sketch(key, mv_prod, dim, n_iter, sketch_op):
     v_old = jax.random.normal(key, shape=(dim, ))
-    v_old /= jnp.sqrt(dim)
+    #v_old /= jnp.sqrt(dim)
+    v_old /= jax.numpy.sqrt(v_old.T @ v_old)
     skv_old = sketch_op @ v_old
 
     skvs = jnp.zeros((n_iter, skv_old.shape[0]))

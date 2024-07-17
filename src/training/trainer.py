@@ -1,23 +1,24 @@
 import jax
 import jax.numpy as jnp
-import flax
 import torch
 import optax
 import time
 import tqdm
+from typing import Union
 
-from src.models import compute_num_params, compute_norm_params, has_batchstats
-from src.training.loss import calculate_loss_without_batchstats, calculate_loss_with_batchstats
+from src.models import compute_num_params, compute_norm_params, Model
+from src.training.losses import get_loss_function
 
 
-def maximum_a_posteriori(
-    model: flax.linen.Module,
+def gradient_descent(
+    model: Model,
     train_loader: torch.utils.data.DataLoader,
     valid_loader: torch.utils.data.DataLoader,
     args_dict: dict,
+    pretrained_params_dict: dict = None,
 ):
     """
-    Maximize the posterior for a given model and dataset.
+    Mimimize the loss for a given model and dataset.
     :param model: initialized model to use for training
     :param train_loader: train dataloader (torch.utils.data.DataLoader)
     :param valid_loader: test dataloader (torch.utils.data.DataLoader)
@@ -32,20 +33,16 @@ def maximum_a_posteriori(
     x_init, y_init = jnp.array(batch[0].numpy()), jnp.array(batch[1].numpy())
     print(f"First batch shape: data = {x_init.shape}, target = {y_init.shape}")
 
-    ################################
-    # init model and loss function #
+    ##############
+    # init model #
     key = jax.random.PRNGKey(args_dict["seed"])
-    if not (has_batchstats(model)):
-        model_has_batch_stats = False
-        params_dict = {
-            'params' : model.init(key, x_init),
-            'batch_stats' : None,
-        }
+    if model.has_dropout:
+        key, key_dropout = jax.random.split(key, 2)
+    if pretrained_params_dict is None:
+        params_dict = model.init(key, x_init)
     else:
-        model_has_batch_stats = True
-        params_dict =  model.init(key, x_init, train=True)
+        params_dict = pretrained_params_dict
     print(f"Model has {compute_num_params(params_dict['params'])} parameters")
-
 
     if args_dict["likelihood"] in ["classification", "binary_multiclassification"]: #only used for prints
         acc_label = "accuracy"
@@ -85,18 +82,20 @@ def maximum_a_posteriori(
     opt_state = optimizer.init(params_dict['params'])
 
 
+    #############
+    # init loss #
+    loss_function_train, loss_function_test = get_loss_function(
+        model,
+        likelihood = args_dict["likelihood"],
+        #class_frequencies = train_loader.dataset.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
+        class_frequencies = train_loader.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
+    )
     ########################
     # define training step #
-    if not model_has_batch_stats:
+    if not model.has_batch_stats:
         @jax.jit
         def train_step(opt_state, params_dict, x, y):
-            loss_fn = lambda p: calculate_loss_without_batchstats(
-                model, 
-                p, 
-                x, 
-                y, 
-                likelihood=args_dict["likelihood"]
-            )
+            loss_fn = lambda p: loss_function_train(p, x, y)
             # Get loss, gradients for loss, and other outputs of loss function
             ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
             loss, (acc_or_sse, ) = ret
@@ -104,18 +103,24 @@ def maximum_a_posteriori(
             param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
             params_dict['params'] = optax.apply_updates(params_dict['params'], param_updates)
             return opt_state, params_dict, loss, acc_or_sse
-    else:
+    elif model.has_batch_stats and not model.has_dropout:
         @jax.jit
         def train_step(opt_state, params_dict, x, y):
-            loss_fn = lambda p: calculate_loss_with_batchstats(
-                model, 
-                p, 
-                params_dict['batch_stats'], 
-                x, 
-                y, 
-                train=True, 
-                likelihood=args_dict["likelihood"]
-            )
+            loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y)
+            # Get loss, gradients for loss, and other outputs of loss function
+            ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
+            loss, (acc_or_sse, new_model_state) = ret
+            # Update parameters and batch statistics
+            param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
+            params_dict = {
+                'params' : optax.apply_updates(params_dict['params'], param_updates),
+                'batch_stats' : new_model_state['batch_stats']
+            }
+            return opt_state, params_dict, loss, acc_or_sse
+    elif model.has_batch_stats and model.has_dropout:
+        @jax.jit
+        def train_step(opt_state, params_dict, x, y, key_dropout):
+            loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y, key_dropout)
             # Get loss, gradients for loss, and other outputs of loss function
             ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
             loss, (acc_or_sse, new_model_state) = ret
@@ -149,21 +154,26 @@ def maximum_a_posteriori(
             X = jnp.array(batch[0].numpy())
             Y = jnp.array(batch[1].numpy())
 
-            opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y)
+            if model.has_dropout:
+                k, key_dropout = jax.random.split(key_dropout, 2)
+                opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y, k)
+            else:
+                opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y)
 
             loss += batch_loss.item()
-            acc_or_sse += batch_acc_or_sse/X.shape[0]
+            batch_acc_or_sse /= X.shape[0]
+            acc_or_sse += batch_acc_or_sse
 
             if args_dict["verbose"]:
-                formatted_batch_acc = f"{batch_acc_or_sse/X.shape[0]:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.2f}" for a in batch_acc_or_sse/X.shape[0]]
-                train_loader_bar.set_description(f"Epoch {epoch}/{args_dict['n_epochs']}, batch loss = {batch_loss.item():.2f}, {acc_label} = {formatted_batch_acc}")
+                formatted_batch_acc = f"{batch_acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{jnp.mean(batch_acc_or_sse):.3f}"]+[f"{a:.2f}" for a in batch_acc_or_sse[:10]]
+                train_loader_bar.set_description(f"Epoch {epoch}/{args_dict['n_epochs']}, batch loss = {batch_loss.item():.3f}, {acc_label} = {formatted_batch_acc}")
     
         acc_or_sse /= len(train_loader)
         loss /= len(train_loader)
         params_norm = compute_norm_params(params_dict['params'])
         batch_sats_norm = compute_norm_params(params_dict['batch_stats'])
-        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.3f}" for a in acc_or_sse]
-        print(f"epoch={epoch} averages - loss={loss:.2f}, params norm={params_norm:.2f}, batch_stats norm={batch_sats_norm:.2f}, {acc_label}={acc_or_sse_formatted}, time={time.time() - start_time:.3f}s")
+        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{jnp.mean(acc_or_sse):.3f}"]+[f"{a:.2f}" for a in acc_or_sse]
+        print(f"epoch={epoch} averages - loss={loss:.3f}, params norm={params_norm:.2f}, batch_stats norm={batch_sats_norm:.2f}, {acc_label}={acc_or_sse_formatted}, time={time.time() - start_time:.3f}s")
         epoch_stats_dict["loss"].append(loss)
         epoch_stats_dict["acc_or_mse"].append(acc_or_sse)
         epoch_stats_dict["params_norm"].append(params_norm)
@@ -179,38 +189,35 @@ def maximum_a_posteriori(
             for batch in loader:
                 X = jnp.array(batch[0].numpy())
                 Y = jnp.array(batch[1].numpy())
-                if model_has_batch_stats:
-                    batch_loss, (batch_acc_or_sse, _) = calculate_loss_with_batchstats(
-                        model, 
+                if model.has_batch_stats:
+                    batch_loss, (batch_acc_or_sse, _) = loss_function_test(
+                        #model, 
                         params_dict['params'], 
                         params_dict['batch_stats'], 
                         X, 
-                        Y, 
-                        train=False, 
-                        likelihood=args_dict["likelihood"]
+                        Y
                     )
                 else:
-                    batch_loss, (batch_acc_or_sse, ) = calculate_loss_without_batchstats(
-                        model, 
+                    batch_loss, (batch_acc_or_sse, ) = loss_function_test(
+                        #model, 
                         params_dict['params'], 
                         X, 
-                        Y, 
-                        likelihood=args_dict["likelihood"],
+                        Y
                     )
                 loss += batch_loss.item()
                 acc_or_sse += batch_acc_or_sse/X.shape[0]
-            acc_or_sse /= len(loader)
-            loss /= len(loader)
+            acc_or_sse = acc_or_sse/len(loader) if len(loader)>0 else 0
+            loss = loss/len(loader) if len(loader)>0 else 0
             return loss, acc_or_sse, time.time() - start_time
 
         loss, acc_or_sse, duration = get_precise_stats(train_loader)
-        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.3f}" for a in acc_or_sse]
+        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{jnp.mean(acc_or_sse):.3f}"]+[f"{a:.2f}" for a in acc_or_sse]
         print(f"Train stats\t - loss={loss:.3f}, {acc_label}={acc_or_sse_formatted}, time={duration:.3f}s")
         train_stats_dict["loss"].append(loss)
         train_stats_dict["acc_or_mse"].append(acc_or_sse)
 
         loss, acc_or_sse, duration = get_precise_stats(valid_loader)
-        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{a:.3f}" for a in acc_or_sse]
+        acc_or_sse_formatted = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else [f"{jnp.mean(acc_or_sse):.3f}"]+[f"{a:.2f}" for a in acc_or_sse]
         print(f"Validation stats - loss={loss:.3f}, {acc_label}={acc_or_sse_formatted} time={duration:.3f}s")
         valid_stats_dict["loss"].append(loss)
         valid_stats_dict["acc_or_mse"].append(acc_or_sse)

@@ -8,11 +8,11 @@ import time
 import tqdm
 from functools import partial
 
-from src.datasets import get_test_loaders, get_output_dim
-from src.models import load_pretrained_model, compute_num_params, compute_norm_params, has_batchstats
+from src.datasets import dataloader_from_string
+from src.models import pretrained_model_from_string, compute_num_params, compute_norm_params
 
-from src.training.loss import calculate_loss_without_batchstats, calculate_loss_with_batchstats
-from src.training.loss import log_gaussian_log_loss, cross_entropy_loss, multiclass_binary_cross_entropy_loss
+from src.training.losses import log_gaussian_log_loss, cross_entropy_loss, multiclass_binary_cross_entropy_loss
+from src.training.losses import get_loss_function
 
 
 
@@ -34,6 +34,8 @@ parser.add_argument("--seed", default=420, type=int)
 parser.add_argument("--run_name", default="good")
 parser.add_argument("--model_save_path", type=str, default="../models", help="Root where the pretrained model is saved")
 
+parser.add_argument("--verbose", action="store_true", required=False, default=False)
+
 
 
 if __name__ == "__main__":
@@ -47,7 +49,7 @@ if __name__ == "__main__":
 
     ###############
     ### dataset ###
-    train_loader, valid_loader, test_loader = get_test_loaders(
+    train_loader, valid_loader, test_loader = dataloader_from_string(
         args.dataset,
         n_samples = args.n_samples,
         batch_size = args.batch_size,
@@ -61,7 +63,7 @@ if __name__ == "__main__":
 
     #############
     ### model ###
-    model, params_dict, args_dict = load_pretrained_model(
+    model, params_dict, args_dict = pretrained_model_from_string(
         model_name = args.model,
         dataset_name = args.dataset,
         n_samples = args.n_samples,
@@ -71,93 +73,85 @@ if __name__ == "__main__":
     )
     print(f"Loaded {args.model} with {compute_num_params(params_dict['params'])} parameters of norm {compute_norm_params(params_dict['params']):.2f}")
 
-
+    
     ###############
     ### testing ###  
-    likelihood=args_dict["likelihood"]
-    if likelihood == "regression":
-        negative_log_likelihood = log_gaussian_log_loss
-    elif likelihood == "classification":
-        negative_log_likelihood = cross_entropy_loss
-    elif likelihood == "binary_multiclassification":
-        negative_log_likelihood = multiclass_binary_cross_entropy_loss
-    else:
-        raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression', 'classification' or 'binary_multiclassification'.")
-    
-    #if params_dict['batch_stats']:
-    if has_batchstats(model):
-        print("with")
+    def get_loss(
+            model, 
+            likelihood,
+            class_frequencies=None
+        ):
+        if likelihood == "regression":
+            negative_log_likelihood = log_gaussian_log_loss
+            extra_stats_function = lambda preds, y : (preds-y)**2                                # sum of squared error
+        elif likelihood == "classification":
+            negative_log_likelihood = cross_entropy_loss
+            extra_stats_function = lambda preds, y : preds.argmax(axis=-1) == y.argmax(axis=-1)    # accuracy
+        elif likelihood == "binary_multiclassification":
+            negative_log_likelihood = lambda preds, y: multiclass_binary_cross_entropy_loss(preds, y, class_frequencies=class_frequencies)
+            extra_stats_function = lambda preds, y : (preds>0.) == (y==1)                 # multiclass accuracy
+        else:
+            raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression', 'classification' or 'binary_multiclassification'.")
+        
+        if model.has_batch_stats:
+            @jax.jit
+            def calculate_loss(params_dict, X, Y): 
+                preds = model.apply_test(params_dict['params'], params_dict['batch_stats'], X)
+                #print("\n\n",preds, "\n", Y)
+                loss = negative_log_likelihood(preds, Y)
+                acc_or_sse = extra_stats_function(preds, Y)
+                return loss, acc_or_sse
+        else:
+            @jax.jit
+            def calculate_loss(params_dict, X, Y):
+                preds = model.apply_test(params_dict['params'], X)
+                loss = negative_log_likelihood(preds, Y)
+                acc_or_sse = extra_stats_function(preds, Y)
+                return loss, acc_or_sse
+        return calculate_loss
+    #_, loss_function_test = get_loss_function(
+    #    model,
+    #    likelihood = args_dict["likelihood"],
+    #    class_frequencies = train_loader.dataset.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
+    #)
+    calculate_loss = get_loss(
+        model, 
+        args_dict["likelihood"], 
+        #class_frequencies = train_loader.dataset.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
+        class_frequencies = train_loader.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
+        )
 
-        def calculate_loss(model, params_dict, X, Y): 
-            preds = model.apply(
-                {'params': params_dict['params'], 'batch_stats': params_dict['batch_stats']},
-                X,
-                train=False,
-                mutable=False)
-            loss = negative_log_likelihood(preds, Y)
-            if likelihood == "regression":
-                sse = (preds-Y)**2
-                return loss, sse
-            elif likelihood == "classification":
-                acc = preds.argmax(axis=-1) == Y.argmax(axis=-1)
-                return loss, acc
-            elif likelihood == "binary_multiclassification":
-                num_classes = preds.shape[1]
-                #acc = jnp.sum((preds>0.) == (y==1)) / num_classes
-                correct = (preds>0.) == (Y==1)
-                #print(correct.shape)
-                acc = jnp.sum(correct, axis=1)
-                #print(acc.shape)
-                return loss, acc
-    else:
-        print("without")
-
-        def calculate_loss(model, params_dict, X, Y):
-            preds = model.apply(params_dict['params'], X)
-            loss = negative_log_likelihood(preds, Y)
-            if likelihood == "regression":
-                sse = (preds-Y)**2
-                return loss, sse
-            elif likelihood == "classification":
-                acc = preds.argmax(axis=-1) == Y.argmax(axis=-1)
-                return loss, acc
-            elif likelihood == "binary_multiclassification":
-                num_classes = preds.shape[1]
-                #acc = jnp.sum((preds>0.) == (y==1)) / num_classes
-                acc = (preds>0.) == (Y==1)
-                return loss, acc
-    #calculate_loss_jit = jax.jit(calculate_loss)
-
-    def get_stats(model, params_dict, loader):
+    def get_stats(params_dict, loader):
         loss = 0.
-        #acc_or_sse = 0. if args_dict["likelihood"] != "binary_multiclassification" else jnp.zeros((get_output_dim(args.dataset), ))
         acc_or_sse = []
         start_time = time.time()
-        for batch in tqdm.tqdm(loader):
+        loader_bar = tqdm.tqdm(loader) if args_dict["verbose"] else loader
+        for batch in loader_bar:
             X = jnp.array(batch[0].numpy())
             Y = jnp.array(batch[1].numpy())
 
-            #batch_loss, batch_acc_or_sse = calculate_loss_jit(model, params_dict, X,Y)
-            batch_loss, batch_acc_or_sse = calculate_loss(model, params_dict, X,Y)
+            batch_loss, batch_acc_or_sse = calculate_loss(params_dict, X,Y)
+            #batch_loss, batch_acc_or_sse = loss_function_test(params_dict["params"], params_dict["batch_stats"], X,Y)
             
             loss += batch_loss.item()
-            #acc_or_sse += batch_acc_or_sse/X.shape[0]
             acc_or_sse.append(batch_acc_or_sse)
-            #print(len(batch_acc_or_sse), batch_acc_or_sse[0])
-        #acc_or_sse /= len(loader)
-        print("aaa", len(acc_or_sse), acc_or_sse.shape)
+            
         acc_or_sse = jnp.concatenate(acc_or_sse)
         loss /= len(loader)
         return loss, acc_or_sse, time.time() - start_time
     
     predictions = {}
-    for loader_type, loader in [("train", train_loader), ("valid", valid_loader), ("test", test_loader)]:
-        loss, acc_or_sse, duration = get_stats(model, params_dict, loader)
-        print(acc_or_sse.shape, acc_or_sse[:30])
+    #for loader_type, loader in [("train", train_loader), ("valid", valid_loader), ("test", test_loader)]:
+    for loader_type, loader in [("valid", valid_loader), ("test", test_loader), ("train", train_loader)]:
+        if len(loader)==0:
+            print(f"empty {loader_type} loader")
+            continue
+        loss, acc_or_sse, duration = get_stats(params_dict, loader)
+        #print(acc_or_sse.shape, acc_or_sse[:30])
         predictions[loader_type] = acc_or_sse
         predictions[f"{loader_type} loss"] = loss
         acc_or_sse = acc_or_sse.mean(axis=0)
-        print(acc_or_sse.shape)
+        #print(acc_or_sse.shape)
         acc_or_sse = f"{acc_or_sse:.3f}" if args_dict["likelihood"] != "binary_multiclassification" else acc_or_sse #[f"{a:.3f}" for a in acc_or_sse]
         if args_dict["likelihood"] in ["classification", "binary_multiclassification"]:
             acc_label = "accuracy"

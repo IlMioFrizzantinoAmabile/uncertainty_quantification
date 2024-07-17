@@ -4,8 +4,8 @@ from jax import flatten_util
 import optax
 import tqdm
 import time
-from src.models import compute_num_params, has_batchstats
-from src.training.loss import calculate_loss_without_batchstats, calculate_loss_with_batchstats
+from src.models import compute_num_params
+from src.training.losses import get_loss_function
 
 
 def swag_score_fun(
@@ -27,16 +27,15 @@ def swag_score_fun(
 
     ########################
     # define training step #
-    if not (has_batchstats(model)):
+    loss_function_train, _ = get_loss_function(
+        model,
+        likelihood = args_dict["likelihood"],
+        class_frequencies = train_loader.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
+    )
+    if not model.has_batch_stats:
         #@jax.jit
         def train_step(opt_state, params_dict, x, y):
-            loss_fn = lambda p: calculate_loss_without_batchstats(
-                model, 
-                p, 
-                x, 
-                y, 
-                likelihood=args_dict["likelihood"]
-            )
+            loss_fn = lambda p: loss_function_train(p, x, y)
             # Get loss, gradients for loss, and other outputs of loss function
             ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
             loss, (acc_or_sse, ) = ret
@@ -44,18 +43,10 @@ def swag_score_fun(
             param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
             params_dict['params'] = optax.apply_updates(params_dict['params'], param_updates)
             return opt_state, params_dict, loss, acc_or_sse
-    else:
+    elif model.has_batch_stats and not model.has_dropout:
         #@jax.jit
         def train_step(opt_state, params_dict, x, y):
-            loss_fn = lambda p: calculate_loss_with_batchstats(
-                model, 
-                p, 
-                params_dict['batch_stats'], 
-                x, 
-                y, 
-                train=True, 
-                likelihood=args_dict["likelihood"]
-            )
+            loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y)
             # Get loss, gradients for loss, and other outputs of loss function
             ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
             loss, (acc_or_sse, new_model_state) = ret
@@ -66,6 +57,21 @@ def swag_score_fun(
                 'batch_stats' : new_model_state['batch_stats']
             }
             return opt_state, params_dict, loss, acc_or_sse
+    elif model.has_batch_stats and model.has_dropout:
+        #@jax.jit
+        def train_step(opt_state, params_dict, x, y, key_dropout):
+            loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y, key_dropout)
+            # Get loss, gradients for loss, and other outputs of loss function
+            ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
+            loss, (acc_or_sse, new_model_state) = ret
+            # Update parameters and batch statistics
+            param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
+            params_dict = {
+                'params' : optax.apply_updates(params_dict['params'], param_updates),
+                'batch_stats' : new_model_state['batch_stats']
+            }
+            return opt_state, params_dict, loss, acc_or_sse
+        key_dropout = jax.random.PRNGKey(420)
     
     def fit_batch_stats(train_loader, params_dict):
         for batch in train_loader:
@@ -141,7 +147,12 @@ def swag_score_fun(
             X = jnp.asarray(batch[0].numpy())
             Y = jnp.asarray(batch[1].numpy())
 
-            opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y)
+
+            if model.has_dropout:
+                k, key_dropout = jax.random.split(key_dropout, 2)
+                opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y, k)
+            else:
+                opt_state, params_dict, batch_loss, batch_acc_or_sse = train_step(opt_state, params_dict, X, Y)
 
             loss_avg += batch_loss.item()
 
@@ -195,20 +206,11 @@ def swag_score_fun(
             key, key_s = jax.random.split(key, 2)
             sample_params = devectorize_fun(sample(key_s, scale=0.5))
             
-            if not (has_batchstats(model)):
-                pred = model.apply(sample_params, datapoints)
+            if not model.has_batch_stats:
+                pred = model.apply_test(sample_params, datapoints)
             else:
                 #batch_stats = fit_batch_stats(train_loader, params_dict)
-                pred = model.apply(
-                    {
-                        'params' : sample_params,
-                        'batch_stats' : params_dict["batch_stats"]
-                        #'batch_stats' : batch_stats
-                    },
-                    datapoints,
-                    train=False,
-                    mutable=False
-                )
+                pred = model.apply_test(sample_params, params_dict["batch_stats"], datapoints)
             preds.append(pred)
         preds = jnp.asarray(preds)
         return preds.var(axis=0).sum(axis=-1)

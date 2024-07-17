@@ -1,8 +1,9 @@
 import jax
 import jax.numpy as jnp
 from src.models import compute_num_params
-from src.autodiff.ggn import get_ggn_vector_product
-from src.autodiff.hessian import get_hessian_vector_product
+from src.datasets.utils import get_subset_loader
+from src.autodiff.ggn import get_ggn_vector_product, get_ggn_vector_product_dataloader
+from src.autodiff.hessian import get_hessian_vector_product, get_hessian_vector_product_dataloader
 from src.autodiff.jacobian import get_jacobian_vector_product, get_jacobianT_vector_product
 from src.estimators.hutchinson import get_diagonal
 from src.estimators.frobenius import get_frobenius_norm
@@ -10,27 +11,53 @@ import time
 
 
 def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
-    #data_array = jnp.array([data[0] for data in train_loader.dataset])
-    data_array = jnp.asarray([train_loader.dataset[i][0] for i in range(int(0.9*args_dict["subsample_trainset"]))])
-    prior_scale = 1. / (2 * len(data_array) * args_dict['prior_std']**2) 
-    n_params = compute_num_params(params_dict["params"])
-
     # define efficient GGN vector product
-    if not args_dict["use_hessian"]:
-        ggn_vector_product = get_ggn_vector_product(
-                params_dict,
-                model,
-                data_array = data_array,
-                likelihood_type = args_dict["likelihood"]
-        )
+    trainset_size = int(0.9*args_dict["subsample_trainset"])
+    if not args_dict["serialize_ggn_on_batches"]:
+        # subsample train dataset
+        data_array = jnp.asarray([train_loader.dataset[i][0] for i in range(trainset_size)])
+        # get matrix vector product fun
+        if not args_dict["use_hessian"]:
+            ggn_vector_product = get_ggn_vector_product(
+                    params_dict,
+                    model,
+                    data_array = data_array,
+                    likelihood_type = args_dict["likelihood"]
+            )
+        else:
+            print("Using the Hessian instead of the GGN")
+            ggn_vector_product = get_hessian_vector_product(
+                    params_dict,
+                    model,
+                    data_array = (data_array, jnp.asarray([data[1] for data in train_loader.dataset])),
+                    likelihood_type = args_dict["likelihood"]
+            )
     else:
-        print("Using the Hessian instead of the GGN")
-        ggn_vector_product = get_hessian_vector_product(
+        # subsample train dataloader
+        train_loader = get_subset_loader(
+            train_loader,
+            trainset_size,
+            batch_size = args_dict["train_batch_size"]
+        )
+        # get matrix vector product fun
+        if not args_dict["use_hessian"]:
+            ggn_vector_product = get_ggn_vector_product_dataloader(
                 params_dict,
                 model,
-                data_array = (data_array, jnp.asarray([data[1] for data in train_loader.dataset])),
+                train_loader,
                 likelihood_type = args_dict["likelihood"]
-        )
+            )
+        else:
+            print("Using the Hessian instead of the GGN")
+            ggn_vector_product = get_hessian_vector_product_dataloader(
+                params_dict,
+                model,
+                train_loader,
+                likelihood_type = args_dict["likelihood"]
+            )
+    prior_scale = 1. / (2 * trainset_size * args_dict['prior_std']**2) 
+    n_params = compute_num_params(params_dict["params"])
+    
     start = time.time()
     ggn_vector_product(jax.random.normal(jax.random.PRNGKey(0), shape=(n_params,)))
     print(f"One GGN vp took {time.time()-start} seconds")
@@ -48,7 +75,7 @@ def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
         key = jax.random.PRNGKey(args_dict["hutchinson_seed"]),
         estimator = "Rademacher"
     ) # for reference: MNIST full dataset on Lenet takes around 7 second every 100 samples (vector products) -> exact diagonal ggn takes around 1 hour
-    print(f"ggn diagonal, dataset size {len(data_array)}, with {n_params} params model -> took {time.time()-start:.3f} seconds")
+    print(f"ggn diagonal, dataset size {trainset_size}, with {n_params} params model -> took {time.time()-start:.3f} seconds")
     min_value = jnp.min(ggn_diagonal)
     if min_value < 0:
         ggn_diagonal -= jnp.min(ggn_diagonal)

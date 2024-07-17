@@ -19,8 +19,8 @@ def compute_norm_params(params):
     vector_params = flatten_util.ravel_pytree(params)[0]
     return jnp.linalg.norm(vector_params).item()
 
-def has_batchstats(model: flax.linen.Module):
-    return isinstance(model, ResNet) or isinstance(model, GoogleNet)
+#def has_batchstats(model: flax.linen.Module):
+#    return isinstance(model, ResNet) or isinstance(model, GoogleNet)
 
 
 def load_pretrained_model(

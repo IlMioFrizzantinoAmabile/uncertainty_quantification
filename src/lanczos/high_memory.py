@@ -17,7 +17,8 @@ def high_memory_lanczos(
         n_iter: int):
     key, key_lancz = jax.random.split(key)
     v0 = jax.random.normal(key_lancz, shape=(dim, ))
-    v0 /= jnp.sqrt(dim)
+    #v0 /= jnp.sqrt(dim)
+    v0 /= jnp.sqrt(v0.T @ v0)
     lanczos_alg = decomp.lanczos_tridiag_full_reortho(n_iter - 1)
     basis, (diag, offdiag) = decomp.decompose_fori_loop(v0, mv_prod, algorithm=lanczos_alg)
     hm_eig_val, hm_trid_eig_vec = scipy.linalg.eigh_tridiagonal(diag, offdiag, lapack_driver='stebz')

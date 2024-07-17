@@ -102,11 +102,33 @@ def get_loader(
             ),
         )
 
+def get_subset_loader(
+        dataloader,
+        n_samples: int,
+        batch_size = 128,
+        shuffle: bool = False,
+        drop_last: bool = True,
+        seed = 0
+    ):
+    if len(dataloader.dataset) < n_samples:
+        raise ValueError(f"Can't return a subset of size {n_samples} from a dataset of size {len(dataloader.dataset)}")
+    sub_dataset, _ = torch.utils.data.random_split(
+        dataloader.dataset, (n_samples, len(dataloader.dataset)-n_samples), generator=torch.Generator().manual_seed(seed)
+    )
+    return torch.utils.data.DataLoader(
+                sub_dataset, 
+                batch_size=batch_size, 
+                shuffle=shuffle, 
+                num_workers=4, 
+                pin_memory=False, 
+                drop_last=drop_last
+            )
+
 def get_output_dim(dataset_name):
     if dataset_name in ["Sinusoidal", "UCI"]:
         return 1 
     elif dataset_name == "CelebA":
-        return 17 #26 #6 #40
+        return 37 #17 #26 #6 #40
     elif dataset_name == "CIFAR-100":
         return 100
     else:

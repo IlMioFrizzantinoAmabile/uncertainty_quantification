@@ -11,7 +11,7 @@ from src.datasets.svhn import SVHN, get_svhn, get_svhn_augmented
 from src.datasets.food101 import FOOD101, get_food101_scaled
 from src.datasets.celeba import CelebA, get_celeba, get_celeba_augmented, get_celeba_ood
 
-def get_train_loaders(
+def augmented_dataloader_from_string(
         dataset_name,
         n_samples = None,
         batch_size: int = 128,
@@ -103,28 +103,25 @@ def get_train_loaders(
     return train_loader, valid_loader
 
 
-def get_test_loaders(
+def dataloader_from_string(
         dataset_name,
         n_samples = None,
         batch_size: int = 128,
         shuffle = True,
         seed: int = 0,
         download: bool = False,
-        data_path: str = "../datasets",
-        angle: float = 0,               # for rotated datasets
-        corr_type: str = "fog",         # for corrupted datasets
-        severity_level: int = 5,        # for corrupted datasets
+        data_path: str = "../datasets"
     ):
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    if dataset_name.startswith("MNIST-R"):
+    if dataset_name.startswith("MNIST-R"):      # rotated datasets
         angle = int(dataset_name.removeprefix("MNIST-R"))
         dataset_name = "MNIST-R"
-    elif dataset_name.startswith("FMNIST-R"):
+    elif dataset_name.startswith("FMNIST-R"):   # rotated datasets
         angle = int(dataset_name.removeprefix("FMNIST-R"))
         dataset_name = "FMNIST-R"
-    elif dataset_name.startswith("CIFAR-10-C"):
+    elif dataset_name.startswith("CIFAR-10-C"): #corrupted datasets
         severity_level, corr_type = dataset_name.removeprefix("CIFAR-10-C").split('-')
         severity_level = int(severity_level)
         dataset_name = "CIFAR-10-C"
