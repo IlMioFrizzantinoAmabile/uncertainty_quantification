@@ -63,7 +63,8 @@ def get_loader(
         split_train_val_ratio: float = 1.0,
         shuffle: bool = False,
         drop_last: bool = True,
-        seed = 0
+        seed = 0,
+        collate_fn = None
     ):
     torch.backends.cudnn.deterministic = True
     torch.manual_seed(seed)
@@ -75,7 +76,8 @@ def get_loader(
             shuffle=shuffle, 
             num_workers=4, 
             pin_memory=False, 
-            drop_last=drop_last
+            drop_last=drop_last,
+            collate_fn = collate_fn
         )
     else:
         train_size = int(split_train_val_ratio * len(dataset))
@@ -90,7 +92,8 @@ def get_loader(
                 shuffle=shuffle, 
                 num_workers=4, 
                 pin_memory=False, 
-                drop_last=drop_last
+                drop_last=drop_last,
+                collate_fn=collate_fn
             ),
             torch.utils.data.DataLoader(
                 dataset_valid, 
@@ -98,7 +101,8 @@ def get_loader(
                 shuffle=shuffle, 
                 num_workers=4, 
                 pin_memory=False, 
-                drop_last=drop_last
+                drop_last=drop_last,
+                collate_fn=collate_fn
             ),
         )
 
@@ -131,5 +135,7 @@ def get_output_dim(dataset_name):
         return 37 #17 #26 #6 #40
     elif dataset_name == "CIFAR-100":
         return 100
+    elif dataset_name == "ImageNet":
+        return 990 #1000
     else:
         return 10

@@ -7,6 +7,7 @@ from src.datasets.cifar10 import CIFAR10, get_cifar10, get_cifar10_augmented, ge
 from src.datasets.cifar100 import CIFAR100, get_cifar100, get_cifar100_augmented
 from src.datasets.svhn import SVHN, get_svhn, get_svhn_augmented
 from src.datasets.food101 import FOOD101, get_food101_scaled
+from src.datasets.imagenet import get_imagenet
 
 #from src.datasets.all_datasets import get_train_loaders, get_test_loaders
 from src.datasets.wrapper import dataloader_from_string, augmented_dataloader_from_string

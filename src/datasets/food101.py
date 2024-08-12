@@ -42,9 +42,11 @@ def get_food101_scaled(
         seed = 0,
         download: bool = True,
         data_path="../datasets",
+        shape = (218, 178)
     ):
     augment_transform = torchvision.transforms.Compose([
-            torchvision.transforms.RandomResizedCrop((218, 178),scale=(1.,1.0),ratio=(1.,1.), antialias=True),
+            #torchvision.transforms.RandomResizedCrop((218, 178),scale=(1.,1.0),ratio=(1.,1.), antialias=True),
+            torchvision.transforms.Resize(shape),
             torchvision.transforms.Normalize(
                 mean=[142.21465, 111.33642,  87.96465], std=[67.121956, 69.36996,  72.18046 ]
             ),

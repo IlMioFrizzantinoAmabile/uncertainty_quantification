@@ -136,3 +136,50 @@ def get_svhn_augmented(
         seed=seed
     )
     return train_loader, valid_loader, test_loader
+
+
+def get_svhn_scaled(
+        batch_size = 128,
+        shuffle = False,
+        n_samples_per_class: int = None,
+        classes: list = list(range(10)),
+        seed = 0,
+        download: bool = True,
+        data_path="../datasets",
+        shape = (256, 256)
+    ):
+    resize_transform = torchvision.transforms.Resize(shape)
+    dataset = SVHN(
+        train=True,
+        transform=resize_transform,
+        n_samples_per_class=n_samples_per_class,
+        classes=classes,
+        seed=seed,
+        download=download, 
+        data_path=data_path, 
+    )
+    dataset_test = SVHN(
+        train=False,
+        transform=resize_transform,
+        n_samples_per_class=None,
+        classes=classes,
+        seed=seed,
+        download=download, 
+        data_path=data_path, 
+    )
+    train_loader, valid_loader = get_loader(
+        dataset,
+        split_train_val_ratio = 0.9,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=True,
+        seed=seed
+    )
+    test_loader = get_loader(
+        dataset_test,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=True,
+        seed=seed
+    )
+    return train_loader, valid_loader, test_loader
