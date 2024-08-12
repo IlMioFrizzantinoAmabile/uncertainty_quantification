@@ -11,13 +11,13 @@ from src.training.trainer import gradient_descent
 
 parser = argparse.ArgumentParser()
 # dataset hyperparams
-parser.add_argument("--dataset", type=str, choices=["Sinusoidal", "UCI", "MNIST", "FMNIST", "SVHN", "CIFAR-10", "CIFAR-100", "CelebA"], default="MNIST")
+parser.add_argument("--dataset", type=str, choices=["Sinusoidal", "UCI", "MNIST", "FMNIST", "SVHN", "CIFAR-10", "CIFAR-100", "CelebA", "ImageNet"], default="MNIST")
 parser.add_argument("--data_path", type=str, default="../datasets/", help="Root path of dataset")
 parser.add_argument("--n_samples", default=None, type=int, help="Number of datapoint to use. None means all")
 parser.add_argument("--uci_type", type=str, choices=["concrete", "boston", "energy", "kin8nm", "wine", "yacht"], default=None)
 
 # model hyperparams
-parser.add_argument("--model", type=str, choices=["MLP", "LeNet", "GoogleNet", "ConvNeXt", "ConvNeXt_L", "ConvNeXt_XL", "ResNet", "ResNet_NoNorm", "ResNet50", "ResNet50PreAct", "VAN_tiny", "VAN_small", "VAN_base", "VAN_large"], default="MLP", help="Model architecture.")
+parser.add_argument("--model", type=str, choices=["MLP", "LeNet", "GoogleNet", "ConvNeXt", "ConvNeXt_L", "ConvNeXt_XL", "ResNet", "ResNet_NoNorm", "ResNet50", "ResNet50PreAct", "VAN_tiny", "VAN_small", "VAN_base", "VAN_large", "SWIN_tiny", "SWIN_large"], default="MLP", help="Model architecture.")
 parser.add_argument("--activation_fun", type=str, choices=["tanh", "relu"], default="tanh", help="Model activation function.")
 parser.add_argument("--mlp_hidden_dim", default=20, type=int, help="Hidden dims of the MLP.")
 parser.add_argument("--mlp_num_layers", default=1, type=int, help="Number of layers in the MLP.")

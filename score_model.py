@@ -19,7 +19,7 @@ from src.ood_scores.lm_lanczos import low_memory_lanczos_score_fun
 parser = argparse.ArgumentParser()
 # dataset hyperparams
 parser.add_argument("--data_path", type=str, default="../datasets/", help="root of dataset")
-parser.add_argument("--ID_dataset", type=str, choices=["Sinusoidal", "UCI", "MNIST", "FMNIST", "SVHN", "CIFAR-10", "CIFAR-100", "CelebA"], default="MNIST", required=True)
+parser.add_argument("--ID_dataset", type=str, choices=["Sinusoidal", "UCI", "MNIST", "FMNIST", "SVHN", "CIFAR-10", "CIFAR-100", "CelebA", "ImageNet"], default="MNIST", required=True)
 parser.add_argument('--OOD_datasets', nargs='+', help='List of OOD datasets to score')
 parser.add_argument("--n_samples", default=None, type=int, help="Number of datapoint used for training. None means all")
 parser.add_argument("--subsample_trainset", default=None, type=int, help="Subsampling of the train datasets used to compute scores")
@@ -113,6 +113,10 @@ if __name__ == "__main__":
         rotated_datasets = [f"CIFAR-10-C{severity}-{corr}" for corr in corruption_types for severity in [1,2,3,4,5] ]
         args_dict["OOD_datasets"].remove("CIFAR-10-C")
         args_dict["OOD_datasets"] += rotated_datasets
+    if "ImageNet-classout" in args.OOD_datasets:
+        classout_datasets = [f"ImageNet-{c}" for c in ["pineapple", "carbonara", "menu", "volcano", "flamingo", "triceratops", "odometer", "lighter", "castle", "parachute"]]
+        args_dict["OOD_datasets"].remove("ImageNet-classout")
+        args_dict["OOD_datasets"] += classout_datasets
     OOD_loaders = [
         dataloader_from_string(
             OOD_dataset,
@@ -189,6 +193,9 @@ if __name__ == "__main__":
         elif args.model == "VAN_large":
             if args.ID_dataset in ["CelebA"]:
                 args_dict["sketch_padding"] = 7 # params 44271589 -> 44271596 = 2^2 × 19^2 × 23 × 31 × 43
+            if args.ID_dataset in ["ImageNet"]:
+                args_dict["sketch_padding"] = 17 # params 44765608 -> 44765625
+        
 
     if args.score == "ensemble":
         params_dicts_list = [params_dict]

@@ -18,7 +18,7 @@ from src.training.losses import get_loss_function
 
 parser = argparse.ArgumentParser()
 # dataset hyperparams
-parser.add_argument("--dataset", type=str, choices=["Sinusoidal", "UCI", "MNIST", "FMNIST", "SVHN", "CIFAR-10", "CIFAR-100", "CelebA"], default="MNIST")
+parser.add_argument("--dataset", type=str, choices=["Sinusoidal", "UCI", "MNIST", "FMNIST", "SVHN", "CIFAR-10", "CIFAR-100", "CelebA", "ImageNet"], default="MNIST")
 parser.add_argument("--data_path", type=str, default="../datasets/", help="Root path of dataset")
 parser.add_argument("--n_samples", default=None, type=int, help="Number of datapoint used for training. None means all")
 parser.add_argument("--uci_type", type=str, choices=["concrete", "boston", "energy", "kin8nm", "wine", "yacht"], default=None)

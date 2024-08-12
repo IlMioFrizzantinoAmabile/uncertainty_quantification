@@ -5,7 +5,7 @@ import functools
 from typing import Tuple
 from jax import flatten_util
 
-from src.training.loss import log_gaussian_log_loss, cross_entropy_loss, multiclass_binary_cross_entropy_loss
+from src.training.losses import log_gaussian_log_loss, cross_entropy_loss, multiclass_binary_cross_entropy_loss
 
 import time
 
