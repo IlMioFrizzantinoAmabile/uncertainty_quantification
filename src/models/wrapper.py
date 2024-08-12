@@ -4,7 +4,7 @@ import dataclasses
 from typing import Callable 
 import jax
 import flax
-from src.models import MLP, LeNet, GoogleNet, ConvNeXt, ResNet, ResNetBlock, PreActResNetBlock, VAN
+from src.models import MLP, LeNet, GoogleNet, ConvNeXt, ResNet, ResNetBlock, PreActResNetBlock, VAN, SwinTransformer
 
 
 @dataclasses.dataclass
@@ -197,17 +197,53 @@ def model_from_string(
         wrapped_model = wrap_model_with_batchstats_dropout(model)
     elif model_name == "VAN_large":
         model = VAN(
-            embed_dims=(64, 128, 320, 512),
-            mlp_ratios=(8, 8, 4, 4),
-            depths=(3, 5, 27, 3),
+            embed_dims = (64, 128, 320, 512),
+            mlp_ratios = (8, 8, 4, 4),
+            depths = (3, 5, 27, 3),
+            dropout = 0.1,
             attach_head = True,
             num_classes = output_dim,
         )
         wrapped_model = wrap_model_with_batchstats_dropout(model)
+    elif model_name == "SWIN_tiny":
+        model = SwinTransformer(
+            patch_size=4,
+            emb_dim=96,
+            depths=(2, 2, 6, 2),
+            num_heads=(3, 6, 12, 24),
+            window_size=7,
+            mlp_ratio=4,
+            use_att_bias=True,
+            dropout=0.0,
+            att_dropout=0.0,
+            drop_path=0.1,
+            use_abs_pos_emb=False,
+            attach_head=True,
+            num_classes=output_dim,
+        )
+        wrapped_model = wrap_model_with_batchstats_dropout(model)
+    elif model_name == "SWIN_large":
+        model = SwinTransformer(
+            patch_size=4,
+            emb_dim=192,
+            depths=(2, 2, 18, 2),
+            num_heads=(6, 12, 24, 48),
+            window_size=12,
+            mlp_ratio=4,
+            use_att_bias=True,
+            dropout=0.0,
+            att_dropout=0.0,
+            drop_path=0.1,
+            use_abs_pos_emb=False,
+            attach_head=True,
+            num_classes=output_dim,
+        )
+        wrapped_model = wrap_model_with_batchstats_dropout(model)
     else:
-        raise ValueError(f"Model {model_name} is not implemented")
+        raise ValueError(f"Model {model_name} is not implemented (yet)")
 
     return wrapped_model
+
 
 
 def pretrained_model_from_string(
