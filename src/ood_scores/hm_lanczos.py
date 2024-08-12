@@ -6,7 +6,7 @@ from src.autodiff.ggn import get_ggn_vector_product, get_ggn_vector_product_data
 from src.autodiff.hessian import get_hessian_vector_product, get_hessian_vector_product_dataloader
 from src.autodiff.jacobian import get_jacobian_vector_product, get_jacobianT_vector_product
 from src.lanczos.high_memory import high_memory_lanczos, precond_smart_lanczos
-from src.estimators.frobenius import get_frobenius_norm
+from src.estimators.frobenius import get_frobenius_norm, get_frobenius_norm_sequential
 from src.sketches import No_sketch, Dense_sketch, SRFT_sketch
 import time
 
@@ -68,9 +68,9 @@ def high_memory_lanczos_score_fun(
     start = time.time()
     ggn_vector_product(jax.random.normal(jax.random.PRNGKey(0), shape=(n_params,)))
     print(f"One GGN vp took {time.time()-start} seconds")
-    start = time.time()
-    ggn_vector_product(jax.random.normal(jax.random.PRNGKey(1), shape=(n_params,)))
-    print(f"Again.. it took {time.time()-start} seconds")
+    #start = time.time()
+    #ggn_vector_product(jax.random.normal(jax.random.PRNGKey(1), shape=(n_params,)))
+    #print(f"Again.. it took {time.time()-start} seconds")
         
     # perform Lanzos and find eigenval/eigenvec pairs
     start = time.time()
@@ -101,11 +101,11 @@ def high_memory_lanczos_score_fun(
         jacobianT_vector_product = get_jacobianT_vector_product(params_dict, model, datapoint, single_datapoint=True)
         inv_sqrt_fakeGGN_jacobian_vector_product = lambda vector: inv_sqrt_approx_ggn_vector_product(jacobianT_vector_product(vector))
         
-        variance_I = get_frobenius_norm(
+        variance_I = get_frobenius_norm_sequential(
             jacobianT_vector_product,
             dim_in = args_dict["output_dim"],
         )
-        variance_P = get_frobenius_norm(
+        variance_P = get_frobenius_norm_sequential(
             inv_sqrt_fakeGGN_jacobian_vector_product,
             dim_in = args_dict["output_dim"],
         )

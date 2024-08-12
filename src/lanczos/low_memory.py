@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import scipy
+from scipy import linalg
 from functools import partial
 from matfree import decomp
 
@@ -21,7 +22,7 @@ def low_memory_lanczos(
     else:
         skvs, alphas, betas = low_memory_lanczos_to_tridiag_sketch(key_lancz, mv_prod, dim, n_iter, sketch_op)
         
-    eig_val, eig_vec = scipy.linalg.eigh_tridiagonal(jnp.array(alphas), jnp.array(betas), lapack_driver='stebz')
+    eig_val, eig_vec = linalg.eigh_tridiagonal(jnp.array(alphas), jnp.array(betas), lapack_driver='stebz')
     eig_vec, eig_val = jnp.array(eig_vec), jnp.array(eig_val)
     sketched_eig_vec = skvs.T @ eig_vec
     # flip eigenvalues and eigenvectors so that they are in decreasing order
