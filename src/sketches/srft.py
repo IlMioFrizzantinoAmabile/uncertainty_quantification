@@ -91,3 +91,27 @@ class SRFT_sketch:
         
         return ans
     
+
+
+
+def get_biggest_prime_factor(n):
+    last_prime = 1
+    while n % 2 == 0:
+        last_prime = 2
+        n = n // 2
+    for i in range(3,int(n**0.5)+1,2):
+        while n % i== 0:
+            last_prime = i
+            n = n // i
+    if n > 2:
+        last_prime = n
+    return last_prime
+
+def get_smallest_greater_value_with_good_factorization(n, max_prime_allowed=127):
+    while get_biggest_prime_factor(n) > max_prime_allowed:
+        n += 1
+    return n
+
+def get_optimal_padding(n):
+    new_value = get_smallest_greater_value_with_good_factorization(n)
+    return new_value - n
