@@ -14,6 +14,7 @@ class Model:
     apply_test : Callable  # apply(x, params)
     has_batch_stats: bool
     has_dropout: bool
+    has_attentionmask: bool
 
 def wrap_model(model) -> Model:
 
@@ -30,7 +31,29 @@ def wrap_model(model) -> Model:
     def apply_test(params, x):
         return model.apply(params, x)
     
-    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=False, has_dropout=False)
+    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=False, has_dropout=False, has_attentionmask=False)
+
+def wrap_model_with_dropout(model) -> Model:
+
+    def init(key, x):
+        params_dict = model.init({"params": key}, x, deterministic=True)
+        return params_dict
+
+    def apply_train(params, x, key_dropout):
+        key_dropout, key_dropout2 = jax.random.split(key_dropout, 2)
+        return model.apply(
+                params,
+                x,
+                deterministic=False,
+                rngs={'drop_path': key_dropout, 'dropout': key_dropout2})
+    
+    def apply_test(params, x):
+        return model.apply(
+                params,
+                x,
+                deterministic=True)
+    
+    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=False, has_dropout=True, has_attentionmask=False)
 
 def wrap_model_with_batchstats(model) -> Model:
 
@@ -50,7 +73,7 @@ def wrap_model_with_batchstats(model) -> Model:
                 train=False,
                 mutable=False)
     
-    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=True, has_dropout=False)
+    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=True, has_dropout=False, has_attentionmask=False)
 
 def wrap_model_with_batchstats_dropout(model) -> Model:
 
@@ -75,7 +98,43 @@ def wrap_model_with_batchstats_dropout(model) -> Model:
                 deterministic=True,
                 mutable=False)
     
-    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=True, has_dropout=True)
+    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=True, has_dropout=True, has_attentionmask=False)
+
+
+def wrap_model_with_attentionmask(model) -> Model:
+
+    def init(key, x):
+        rng1, rng2, rng3 = jax.random.split(key, 3)
+        params_dict = model.init(
+            {"params": rng1, "dropout": rng2, "drop_path": rng3}, x, False
+        )
+        return params_dict
+
+    def apply_train(params, attention_mask, relative_position_index, x, key_dropout):
+        key_dropout, key_dropout2 = jax.random.split(key_dropout, 2)
+        return model.apply(
+                {
+                    'params': params, 
+                    'attention_mask': attention_mask, 
+                    'relative_position_index': relative_position_index
+                },
+                x,
+                deterministic=False,
+                rngs={'drop_path': key_dropout, 'dropout': key_dropout2},
+                mutable=['attention_mask', 'relative_position_index'])
+    
+    def apply_test(params, attention_mask, relative_position_index, x):
+        return model.apply(
+                {
+                    'params': params, 
+                    'attention_mask': attention_mask, 
+                    'relative_position_index': relative_position_index
+                },
+                x,
+                deterministic=True,
+                mutable=False)
+    
+    return Model(init=init, apply_train=apply_train, apply_test=apply_test, has_batch_stats=False, has_dropout=True, has_attentionmask=True)
 
 
 def model_from_string(
@@ -117,7 +176,7 @@ def model_from_string(
             num_classes = output_dim,
             deterministic = True
         )
-        wrapped_model = wrap_model_with_batchstats(model)
+        wrapped_model = wrap_model(model)
     elif model_name == "ConvNeXt_L":
         model = ConvNeXt(
             depths = (3, 3, 9, 3),
@@ -127,7 +186,7 @@ def model_from_string(
             num_classes = output_dim,
             deterministic = True
         )
-        wrapped_model = wrap_model_with_batchstats(model)
+        wrapped_model = wrap_model(model)
     elif model_name == "ConvNeXt_XL":
         model = ConvNeXt(
             depths = (3, 3, 27, 3),
@@ -137,7 +196,7 @@ def model_from_string(
             num_classes = output_dim,
             deterministic = True
         )
-        wrapped_model = wrap_model_with_batchstats(model)
+        wrapped_model = wrap_model(model)
     elif model_name == "ResNet":
         model = ResNet(
             output_dim = output_dim,
@@ -171,7 +230,7 @@ def model_from_string(
             mlp_ratios=(8, 8, 4, 4),
             depths=(3, 3, 5, 2),
             dropout=0., #0.4,
-            drop_path=0., #0.5,
+            drop_path=0.3, #0.5,
             attach_head=True,
             deterministic=False,
             num_classes=output_dim,
@@ -200,8 +259,10 @@ def model_from_string(
             embed_dims = (64, 128, 320, 512),
             mlp_ratios = (8, 8, 4, 4),
             depths = (3, 5, 27, 3),
-            dropout = 0.1,
-            attach_head = True,
+            dropout=0.,
+            drop_path=0.1,
+            attach_head=True,
+            deterministic=False,
             num_classes = output_dim,
         )
         wrapped_model = wrap_model_with_batchstats_dropout(model)
@@ -209,8 +270,8 @@ def model_from_string(
         model = SwinTransformer(
             patch_size=4,
             emb_dim=96,
-            depths=(2, 2, 6, 2),
-            num_heads=(3, 6, 12, 24),
+            depths=(1,1), #(2, 2, 6, 2),
+            num_heads=(3,3), #(3, 6, 12, 24),
             window_size=7,
             mlp_ratio=4,
             use_att_bias=True,
@@ -221,14 +282,14 @@ def model_from_string(
             attach_head=True,
             num_classes=output_dim,
         )
-        wrapped_model = wrap_model_with_batchstats_dropout(model)
+        wrapped_model = wrap_model_with_attentionmask(model)
     elif model_name == "SWIN_large":
         model = SwinTransformer(
             patch_size=4,
             emb_dim=192,
             depths=(2, 2, 18, 2),
             num_heads=(6, 12, 24, 48),
-            window_size=12,
+            window_size=7,
             mlp_ratio=4,
             use_att_bias=True,
             dropout=0.0,
@@ -238,7 +299,7 @@ def model_from_string(
             attach_head=True,
             num_classes=output_dim,
         )
-        wrapped_model = wrap_model_with_batchstats_dropout(model)
+        wrapped_model = wrap_model_with_attentionmask(model)
     else:
         raise ValueError(f"Model {model_name} is not implemented (yet)")
 

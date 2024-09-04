@@ -74,7 +74,7 @@ def get_loader(
             dataset, 
             batch_size=batch_size, 
             shuffle=shuffle, 
-            num_workers=4, 
+            num_workers=0, #4, 
             pin_memory=False, 
             drop_last=drop_last,
             collate_fn = collate_fn
@@ -90,7 +90,7 @@ def get_loader(
                 dataset_train, 
                 batch_size=batch_size, 
                 shuffle=shuffle, 
-                num_workers=4, 
+                num_workers=0, #4, 
                 pin_memory=False, 
                 drop_last=drop_last,
                 collate_fn=collate_fn
@@ -99,7 +99,7 @@ def get_loader(
                 dataset_valid, 
                 batch_size=batch_size, 
                 shuffle=shuffle, 
-                num_workers=4, 
+                num_workers=0, #4, 
                 pin_memory=False, 
                 drop_last=drop_last,
                 collate_fn=collate_fn
@@ -123,7 +123,7 @@ def get_subset_loader(
                 sub_dataset, 
                 batch_size=batch_size, 
                 shuffle=shuffle, 
-                num_workers=4, 
+                num_workers=0, #4, 
                 pin_memory=False, 
                 drop_last=drop_last
             )

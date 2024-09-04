@@ -15,7 +15,7 @@ class Sinusoidal(torch.utils.data.Dataset):
             np.random.seed(seed)
         else:
             np.random.seed(seed+1000)
-        n_samples = 1000 if n_samples is None else n_samples
+        n_samples = 200 if n_samples is None else n_samples
         interval_size = int(n_samples / len(intervals))
         self.data = np.concatenate([
             np.random.uniform(low=low, high=high, size=interval_size) for low,high in intervals
@@ -54,7 +54,7 @@ def get_sinusoidal(
     )
     train_loader, valid_loader = get_loader(
         dataset,
-        split_train_val_ratio = 0.9,
+        split_train_val_ratio = 0.5, #0.9,
         batch_size=batch_size,
         shuffle=shuffle,
         drop_last=True,

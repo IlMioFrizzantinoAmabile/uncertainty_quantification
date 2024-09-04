@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import scipy
 import numpy as np
 from functools import partial
-from matfree.decomp import lanczos_full_reortho #lanczos_tridiag_full_reortho
+from matfree.decomp import tridiag_sym #_tridiag_reortho_full #lanczos_full_reortho #lanczos_tridiag_full_reortho
 from matfree import decomp
 from src.lanczos.low_memory import smart_lanczos
 
@@ -20,12 +20,18 @@ def high_memory_lanczos(
     v0 = jax.random.normal(key_lancz, shape=(dim, ))
     #v0 /= jnp.sqrt(dim)
     v0 /= jnp.sqrt(v0.T @ v0)
-    lanczos_alg = lanczos_full_reortho(n_iter - 1)
-    basis, (diag, offdiag) = decomp.decompose_fori_loop(v0, mv_prod, algorithm=lanczos_alg)
-    hm_eig_val, hm_trid_eig_vec = scipy.linalg.eigh_tridiagonal(diag, offdiag, lapack_driver='stebz')
+    #lanczos_alg = lanczos_full_reortho(n_iter - 1)
+    #basis, (diag, offdiag) = decomp.decompose_fori_loop(v0, mv_prod, algorithm=lanczos_alg)
+    #estimate = tridiag_sym(n_iter, materialize=False)
+    estimate = tridiag_sym(n_iter, materialize=True)
+    decomposition, remainder = estimate(mv_prod, v0)
+    #basis, (diag, offdiag) = decomposition
+    basis, matrix = decomposition
+    #hm_eig_val, hm_trid_eig_vec = jax.scipy.linalg.eigh_tridiagonal(diag, offdiag)#, lapack_driver='stebz')
+    hm_eig_val, hm_trid_eig_vec = jax.scipy.linalg.eigh(matrix)
     # flip eigenvalues and eigenvectors so that they are in decreasing order
-    hm_trid_eig_vec = np.stack(list(hm_trid_eig_vec.T)[::-1], axis=1)
-    hm_eig_val = np.array(list(hm_eig_val)[::-1])
+    hm_trid_eig_vec = jnp.stack(list(hm_trid_eig_vec.T)[::-1], axis=1)
+    hm_eig_val = jnp.array(list(hm_eig_val)[::-1])
     # multiply eigenvector matrices
     hm_eig_vec = basis.T @ hm_trid_eig_vec
     

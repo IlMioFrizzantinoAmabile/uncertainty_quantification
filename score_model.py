@@ -8,6 +8,7 @@ import time
 from src.models import pretrained_model_from_string, compute_num_params, compute_norm_params
 from src.datasets import dataloader_from_string, get_output_dim
 from src.datasets.cifar10 import corruption_types
+from src.sketches.srft import get_optimal_padding
 
 from src.ood_scores.ensemble import ensemble_score_fun
 from src.ood_scores.diagonal_lla import diagonal_lla_score_fun
@@ -15,6 +16,7 @@ from src.ood_scores.scod import scod_score_fun
 from src.ood_scores.swag import swag_score_fun
 from src.ood_scores.hm_lanczos import high_memory_lanczos_score_fun, smart_lanczos_score_fun
 from src.ood_scores.lm_lanczos import low_memory_lanczos_score_fun
+from src.ood_scores.projected_ensemble import projected_ensemble_score_fun
 
 parser = argparse.ArgumentParser()
 # dataset hyperparams
@@ -34,7 +36,7 @@ parser.add_argument("--model_seed", default=420, type=int)
 ##############
 # ood scores #
 ##############
-parser.add_argument("--score", type=str, choices=["scod", "swag", "ensemble", "local_ensemble", "sketched_local_ensemble", "low_rank_lla", "smart_lla", "diagonal_lla"], default=None)
+parser.add_argument("--score", type=str, choices=["scod", "swag", "ensemble", "projected_ensemble", "local_ensemble", "sketched_local_ensemble", "low_rank_lla", "smart_lla", "diagonal_lla"], default=None)
 # lanczos
 parser.add_argument("--lanczos_hm_iter", default=10, type=int, help="Lancsos high-memory iterations to run")
 parser.add_argument("--lanczos_lm_iter", default=100, type=int, help="Lancsos low-mwmory iterations to run")
@@ -57,12 +59,14 @@ parser.add_argument("--hutchinson_samples", default=10000, type=int, help="Only 
 parser.add_argument("--hutchinson_seed", default=1, type=int, help="Only used for diagonal lla score")
 # ensemble
 parser.add_argument("--ensemble_size", default=5, type=int, help="Only used for ensemble score")
-#swag
+# swag
 parser.add_argument("--swag_n_vec", default=0, type=int, help="Only used for swag score")
 parser.add_argument("--swag_diag_only", action="store_true", required=False, default=False)
 parser.add_argument("--swag_lr", default=0.001, type=float)
 parser.add_argument("--swag_momentum", default=0.9, type=float)
 parser.add_argument("--swag_collect_interval", default=3, type=int)
+# projected ensemble
+parser.add_argument("--n_epochs_projected_ensemble", default=1, type=int, help="Used for projected ensemble score")
 
 # print more stuff
 parser.add_argument("--verbose", action="store_true", required=False, default=False)
@@ -113,6 +117,10 @@ if __name__ == "__main__":
         rotated_datasets = [f"CIFAR-10-C{severity}-{corr}" for corr in corruption_types for severity in [1,2,3,4,5] ]
         args_dict["OOD_datasets"].remove("CIFAR-10-C")
         args_dict["OOD_datasets"] += rotated_datasets
+    if "CelebA-classout" in args.OOD_datasets:
+        classout_datasets = [f"CelebA-{c}" for c in ["Mustache", "Bald", "Eyeglasses"]]
+        args_dict["OOD_datasets"].remove("CelebA-classout")
+        args_dict["OOD_datasets"] += classout_datasets
     if "ImageNet-classout" in args.OOD_datasets:
         classout_datasets = [f"ImageNet-{c}" for c in ["pineapple", "carbonara", "menu", "volcano", "flamingo", "triceratops", "odometer", "lighter", "castle", "parachute"]]
         args_dict["OOD_datasets"].remove("ImageNet-classout")
@@ -171,7 +179,6 @@ if __name__ == "__main__":
 
     # set reasonable srft sketching padding to reduce prime factorization max value (needed by jax fft implementation to be <127)
     if args.sketch == "srft" and args.sketch_padding is None:
-        args_dict["sketch_padding"] = 0
         if args.model == "LeNet":
             if args.ID_dataset in ["MNIST", "FMNIST"]:
                 args_dict["sketch_padding"] = 10 # params 44426 -> 44436 = 2^2 × 3 × 7 × 23^2
@@ -195,6 +202,11 @@ if __name__ == "__main__":
                 args_dict["sketch_padding"] = 7 # params 44271589 -> 44271596 = 2^2 × 19^2 × 23 × 31 × 43
             if args.ID_dataset in ["ImageNet"]:
                 args_dict["sketch_padding"] = 17 # params 44765608 -> 44765625
+        elif args.model == "SWIN_large":
+            args_dict["sketch_padding"] = 46 # 196517106 -> 196517152 = 2^5 × 13 × 19 × 23^2 × 47
+        else:
+            args_dict["sketch_padding"] = get_optimal_padding(compute_num_params(params_dict['params']))
+            print(f"No sketch_padding value given. Computed the optimal one: {args_dict["sketch_padding"]}")
         
 
     if args.score == "ensemble":
@@ -212,6 +224,9 @@ if __name__ == "__main__":
         score_fun = ensemble_score_fun(model, params_dicts_list)
         eigenval = []
         approx_quadratic_form, quadratic_form = None, None
+    elif args.score == "projected_ensemble":
+        score_fun, quadratic_form, approx_quadratic_form = projected_ensemble_score_fun(model, params_dict, train_loader, args_dict)
+        eigenval = []
     elif args.score == "diagonal_lla":
         score_fun, quadratic_form, approx_quadratic_form = diagonal_lla_score_fun(model, params_dict, train_loader, args_dict)
         eigenval = []
@@ -318,6 +333,8 @@ if __name__ == "__main__":
 
     if args.score == "ensemble":
         experiment_name += f"ensemble_size{args.ensemble_size}"
+    elif args.score == "projected_ensemble":
+        experiment_name += f"projected_ensemble_size{args.ensemble_size}"
     elif args.score == "diagonal_lla":
         experiment_name += f"diagonal_lla_sample{args.hutchinson_samples}"
     elif args.score == "scod":

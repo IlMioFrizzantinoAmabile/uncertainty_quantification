@@ -1,0 +1,1 @@
+from src.autodiff.ntk import get_ntk_vector_product

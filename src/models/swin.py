@@ -45,7 +45,7 @@ def window_partition(x, window_size):
             channels,
         ),
     )
-    print(height, width, window_size)
+    #print(height, width, window_size)
     windows = jnp.reshape(
         jnp.transpose(x, (0, 1, 3, 2, 4, 5)), (-1, window_size, window_size, channels)
     )
@@ -518,7 +518,8 @@ class SwinTransformer(nn.Module):
 
         x = nn.Dropout(self.dropout)(x, deterministic)
 
-        dpr = [x.item() for x in jnp.linspace(0, self.drop_path, sum(self.depths))]
+        #dpr = [x.item() for x in jnp.linspace(0, self.drop_path, sum(self.depths))]
+        dpr = jnp.linspace(0, self.drop_path, sum(self.depths))
 
         layers = []
         for i in range(len(self.depths)):

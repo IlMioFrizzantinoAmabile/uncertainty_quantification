@@ -7,6 +7,11 @@ import datetime
 from src.datasets import augmented_dataloader_from_string, get_output_dim
 from src.models import model_from_string, pretrained_model_from_string
 from src.training.trainer import gradient_descent
+from src.training.trainer_swin import gradient_descent_swin
+from src.training.trainer_fancy import gradient_descent_fancy
+
+#import warnings
+#warnings.filterwarnings("ignore")
 
 
 parser = argparse.ArgumentParser()
@@ -34,6 +39,7 @@ parser.add_argument("--momentum", type=float, default=None)
 parser.add_argument("--likelihood", type=str, choices=["regression", "classification", "binary_multiclassification"], default="classification")
 
 parser.add_argument("--default_hyperparams", action="store_true", required=False, default=False)
+parser.add_argument("--fancy", action="store_true", required=False, default=False)
 
 # extra regularizer
 parser.add_argument("--regularizer", type=str, choices=["log_determinant_ggn", "log_determinant_ntk"], default=None)
@@ -152,20 +158,39 @@ if __name__ == "__main__":
     ### training ###  
     if args.run_name_pretrained is not None:
         _, pretrained_params_dict, _ = pretrained_model_from_string(
-            model_name = args.model,
+            model_name = args.model if args.model!="MLP" else f"MLP_depth{args_dict['mlp_num_layers']}_hidden{args_dict['mlp_hidden_dim']}",
             dataset_name = args.dataset,
             n_samples = args.n_samples,
             run_name = args.run_name_pretrained,
             seed = args.seed,
             save_path = args.model_save_path
         )
-    params_dict, stats_dict = gradient_descent(
-            model, 
-            train_loader, 
-            valid_loader, 
-            args_dict,
-            pretrained_params_dict = None if args.run_name_pretrained is None else pretrained_params_dict
-        )
+
+    if not args.fancy:
+        if True or args.model not in ["SWIN_tiny", "SWIN_large"]:
+            params_dict, stats_dict = gradient_descent(
+                    model, 
+                    train_loader, 
+                    valid_loader, 
+                    args_dict,
+                    pretrained_params_dict = None if args.run_name_pretrained is None else pretrained_params_dict
+                )
+        else:
+            params_dict, stats_dict = gradient_descent_swin(
+                model, 
+                train_loader, 
+                valid_loader, 
+                args_dict,
+                pretrained_params_dict = None if args.run_name_pretrained is None else pretrained_params_dict
+            )
+    else:
+        params_dict, stats_dict = gradient_descent_fancy(
+                model, 
+                train_loader, 
+                valid_loader, 
+                args_dict,
+                pretrained_params_dict = None if args.run_name_pretrained is None else pretrained_params_dict
+            )
     model_dict = {"model": args.model, **params_dict}
 
 

@@ -6,7 +6,7 @@ from typing import Literal
 from src.models.wrapper import Model
 
 def mse_loss(preds, y):
-    residual = preds - y
+    residual = preds.reshape(-1) - y.reshape(-1)
     return jnp.mean(residual**2)
 
 @partial(jax.jit, static_argnames=['rho'])
@@ -64,10 +64,24 @@ def get_loss_function(
     else:
         raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression', 'classification' or 'binary_multiclassification'.")
 
-    if not model.has_batch_stats:
+    if not model.has_batch_stats and not model.has_dropout:
         @jax.jit
         def loss_function_train(params, x, y):
             preds = model.apply_train(params, x)
+            loss = negative_log_likelihood(preds, y)
+            acc_or_sse = extra_stats_function(preds, y)
+            return loss, (acc_or_sse, )
+        @jax.jit
+        def loss_function_test(params, x, y):
+            preds = model.apply_test(params, x)
+            loss = negative_log_likelihood(preds, y)
+            acc_or_sse = extra_stats_function(preds, y)
+            return loss, (acc_or_sse, )
+        
+    elif not model.has_batch_stats and model.has_dropout:
+        @jax.jit
+        def loss_function_train(params, x, y, key_dropout):
+            preds = model.apply_train(params, x, key_dropout)
             loss = negative_log_likelihood(preds, y)
             acc_or_sse = extra_stats_function(preds, y)
             return loss, (acc_or_sse, )
@@ -108,3 +122,23 @@ def get_loss_function(
 
             
     return loss_function_train, loss_function_test
+
+
+def get_likelihood(
+        likelihood: Literal["classification", "regression", "binary_multiclassification"] = "classification",
+        class_frequencies = None
+    ):
+
+    if likelihood == "regression":
+        negative_log_likelihood = log_gaussian_log_loss
+        extra_stats_function = lambda preds, y : jnp.sum((preds-y)**2)                                  # sum of squared error
+    elif likelihood == "classification":
+        negative_log_likelihood = cross_entropy_loss
+        extra_stats_function = lambda preds, y : jnp.sum(preds.argmax(axis=-1) == y.argmax(axis=-1))    # accuracy
+    elif likelihood == "binary_multiclassification":
+        negative_log_likelihood = lambda preds, y: multiclass_binary_cross_entropy_loss(preds, y, class_frequencies)
+        extra_stats_function = lambda preds, y : jnp.sum((preds>0.) == (y==1), axis=0)                  # multiclass accuracy
+    else:
+        raise ValueError(f"Likelihood {likelihood} not supported. Use either 'regression', 'classification' or 'binary_multiclassification'.")
+    
+    return negative_log_likelihood, extra_stats_function

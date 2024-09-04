@@ -37,7 +37,8 @@ def get_imagenet(
         return img
     train_transform = torchvision.transforms.Compose(
             #[torchvision.transforms.RandomResizedCrop(224), torchvision.transforms.RandomHorizontalFlip(), normalize]
-            [torchvision.transforms.Resize((256, 256)), normalize]
+            #[torchvision.transforms.Resize((256, 256)), normalize]
+            [torchvision.transforms.Resize((224, 224)), normalize]
         )
     def target_transform(y):
         return torch.nn.functional.one_hot(torch.tensor(y), n_classes).numpy()
@@ -126,7 +127,8 @@ def get_imagenet_subclasses(
         return img
     train_transform = torchvision.transforms.Compose(
             #[torchvision.transforms.RandomResizedCrop(224), torchvision.transforms.RandomHorizontalFlip(), normalize]
-            [torchvision.transforms.Resize((256, 256)), normalize]
+            #[torchvision.transforms.Resize((256, 256)), normalize]
+            [torchvision.transforms.Resize((224, 224)), normalize]
         )
     
     dataset = torchvision.datasets.ImageFolder(

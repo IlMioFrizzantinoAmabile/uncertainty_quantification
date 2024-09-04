@@ -19,14 +19,19 @@ def get_ggn_vector_product(
     ):
     if single_datapoint:
         data_array = jnp.expand_dims(data_array, 0)
+
     params = params_dict['params']
-    if not model.has_batch_stats:
-        model_on_data = lambda p: model.apply_test(p, data_array)
-        devectorize_fun = flatten_util.ravel_pytree(params)[1]
-    else:
+    if model.has_attentionmask:
+        attention_mask = params_dict['attention_mask']
+        relative_position_index = params_dict['relative_position_index']
+        model_on_data = lambda p: model.apply_test(p, attention_mask, relative_position_index, data_array)
+    elif model.has_batch_stats:
         batch_stats = params_dict['batch_stats']
         model_on_data = lambda p: model.apply_test(p, batch_stats, data_array)
-        devectorize_fun = flatten_util.ravel_pytree(params)[1]
+    else:
+        model_on_data = lambda p: model.apply_test(p, data_array)
+    devectorize_fun = flatten_util.ravel_pytree(params)[1]
+
     @jax.jit
     def ggn_tree_product(tree):
         _, J_tree = jax.jvp(model_on_data, (params,), (tree,))
@@ -65,11 +70,15 @@ def get_ggn_vector_product_dataloader(
         likelihood_type: str = "regression"
     ):
     params = params_dict['params']
-    if not model.has_batch_stats:
-        model_apply = lambda data, p: model.apply_test(p, data)
-    else:
+    if model.has_attentionmask:
+        attention_mask = params_dict['attention_mask']
+        relative_position_index = params_dict['relative_position_index']
+        model_apply = lambda data, p: model.apply_test(p, attention_mask, relative_position_index, data)
+    elif model.has_batch_stats:
         batch_stats = params_dict['batch_stats']
         model_apply = lambda data, p: model.apply_test(p, batch_stats, data)
+    else:
+        model_apply = lambda data, p: model.apply_test(p, data)
     devectorize_fun = flatten_util.ravel_pytree(params)[1]
     flatten_param = jnp.array(flatten_util.ravel_pytree(params)[0])
 
@@ -114,7 +123,7 @@ def get_ggn_vector_product_dataloader(
     ggn_vector_product_batch(x_init, jnp.ones_like(flatten_param))
     print(f"Again...... it took {time.time()-start} seconds")
     start = time.time()
-    ggn_vector_product_batch(x_init, 2*jnp.ones_like(flatten_param))
+    ggn_vector_product_batch(jnp.ones_like(x_init), 2*jnp.ones_like(flatten_param))
     print(f"Aaand again...... it took {time.time()-start} seconds")
 
     
