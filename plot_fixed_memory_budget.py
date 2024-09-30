@@ -62,7 +62,7 @@ if __name__ == "__main__":
             model = "VAN_tiny"
             #model = "VAN_large"
         if dataset=="ImageNet":
-            model = "VAN_large"
+            model = "SWIN_large"
     else:
         model = args.model
 
@@ -86,11 +86,14 @@ if __name__ == "__main__":
     elif dataset == "CelebA":
         ood_datasets = ["FOOD101", "CelebA-Mustache", "CelebA-Bald", "CelebA-Eyeglasses"]
         ood_datasets_xlabel = ["FOOD-101", "Mustache only", "Bald only", "Eyeglasses only"]
+        ood_datasets = ["FOOD101", "CelebA-Bald", "CelebA-Eyeglasses", "CelebA-Mustache"]
+        ood_datasets_xlabel = ["FOOD-101", "Bald only", "Eyeglasses only", "Mustache only"]
         #ood_datasets = ["CelebA-Mustache", "CelebA-Bald", "CelebA-Eyeglasses"]
         #ood_datasets_xlabel = ["Mustache only", "Bald only", "Eyeglasses only"]
     elif dataset == "ImageNet":
         ood_datasets = ["SVHN-256", "FOOD101-256", "ImageNet-classout"]
-        ood_datasets_xlabel = ["SVHN", "FOOD-101"]
+        ood_datasets = ["ImageNet-classout"]
+        ood_datasets_xlabel = []
 
 
     if "MNIST-R" in ood_datasets:
@@ -111,10 +114,15 @@ if __name__ == "__main__":
         ood_datasets_xlabel = ["SVHN", "CIFAR-100", "Brightness", "Defocus blur", "Elastic transf", "Frost", "Gaussian blur", "Glass blur", "Impulse noise", "Jpeg compress", "Motion blur",
                 "Pixelate", "Saturate", "Snow", "Spatter", "Zoom blur"]
     if "ImageNet-classout" in ood_datasets:
-        classout_datasets = [f"ImageNet-{c}" for c in ["pineapple", "carbonara", "menu", "volcano", "flamingo", "triceratops", "odometer", "lighter", "castle", "parachute"]]
+        #classout_datasets = [f"ImageNet-{c}" for c in ["pineapple", "carbonara", "menu", "volcano", "flamingo", "triceratops", "odometer", "lighter", "castle", "parachute"]]
+        classout_datasets = [f"ImageNet-{c}" for c in ["carbonara", "castle", "flamingo", "lighter", "menu", "odometer", "parachute", "pineapple", "triceratops", "volcano"]]
+        #classout_datasets = [f"ImageNet-{c}" for c in ["castle", "flamingo", "lighter", "odometer", "parachute", "pineapple", "triceratops", "volcano"]]
         ood_datasets.remove("ImageNet-classout")
         ood_datasets += classout_datasets
-        ood_datasets_xlabel += ["pineapple", "carbonara", "menu", "volcano", "flamingo", "triceratops", "odometer", "lighter", "castle", "parachute"]
+        #ood_datasets_xlabel += ["Pineapple", "Carbonara", "Menu", "Volcano", "Flamingo", "Triceratops", "Odometer", "Lighter", "Castle", "Parachute"]
+        ood_datasets_xlabel += ["Carbonara", "Castle", "Flamingo", "Lighter", "Menu", "Odometer", "Parachute", "Pineapple", "Triceratops", "Volcano"]
+        #ood_datasets_xlabel = ["Castle", "Flamingo", "Lighter", "Odometer", "Parachute", "Pineapple", "Triceratops", "Volcano"]
+        ood_datasets_xlabel = [f"{c} only" for c in ood_datasets_xlabel]
 
         
     def auroc(scores_id, scores_ood):
@@ -222,6 +230,7 @@ if __name__ == "__main__":
         lanczos_hm_iters = [10, 100, 1000]
     if dataset=="CelebA":
         subsample_trainsets = [10000]#100, 1000]
+        subsample_trainsets = [10000]#100, 1000]
         lanczos_hm_iters = [100]
     if dataset=="ImageNet":
         subsample_trainsets = [100000]
@@ -232,18 +241,35 @@ if __name__ == "__main__":
     smart = False
     use_all_eigenvectors = False
     #sns.set_style('whitegrid')
-    markers = ["P", "v", "^", "X", "o", "*", '.','.', ',']
-    names = [
-        #"SLU", 
-        #"LLA / LE / LE-h",
-        #"LLA",
-        #"LE",
-        #"LE-h", 
-        #"LLA-d", 
-        #"SCOD", 
-        "SWAG",
-        #"DE"
-    ]
+    markers = ["P", "v", "^", "X", "o", "*", '.','v', ',']
+    #markers = ["P", "v", "^", "o", "*", '.',"v", ',']  #without SCOD
+    if dataset=="ImageNet":
+        names = [
+            "SLU",
+            #"SLU (x4)",
+            #"SLU (x2)",
+            #"LLA / LE / LE-h",
+            "LLA",
+            "LLA-d", 
+            #"SCOD", 
+            "SWAG",
+            "LE-h", 
+            "LE",
+            #"DE",
+            #"max"
+        ]
+    else:
+        names = [
+            "SLU",
+            "LLA / LE",
+            #"LLA-d", 
+            "SCOD", 
+            "SWAG",
+            #"LE-h", 
+            #"LE",
+            "DE",
+            #"max"
+        ]
     if dataset=="MNIST": 
         if budget == 3: #seeds 1-5
             experiment_names = [ #mem budget 3
@@ -317,18 +343,18 @@ if __name__ == "__main__":
     elif dataset=="CelebA": 
         if budget == 3: # seeds buoni 1 3 5 (+ 6 7 10)
             experiment_names = [ #mem budget 3
-                "lanczos_seed1_size_HM0of0_LM90of100_sketch_srft_seed0_size10000",
-                "eig_lanczos_seed1_size_HM2of3_LM0of0", 
-                #"lanczos_seed1_size_HM2of3_LM0of0", 
+                #"lanczos_seed1_size_HM0of0_LM9of11_sketch_srft_seed1_size1000000",
+                "lanczos_seed1_size_HM0of0_LM900of1000_sketch_srft_seed1_size10000",
+                #"eig_lanczos_seed1_size_HM2of3_LM0of0", 
+                "lanczos_seed1_size_HM2of3_LM0of0", 
                 #"hess_lanczos_seed1_size_HM2of3_LM0of0",
-                "diagonal_lla_sample10000", 
+                #"diagonal_lla_sample10000", 
                 "scod_HMsize3",  
                 "swag_vec3_mom0.99_collect100",
-                "ensemble_size3"]
-            
-            experiment_names = [ #mem budget 3
-                "swag_vec3_mom0.99_collect100",
+                "ensemble_size3",
+                #"max_logit",
                 ]
+            #experiment_names = ["projected_ensemble_size3_epoch1"]
         if budget == 10:
             experiment_names = [ #mem budget 10
                 "lanczos_seed1_size_HM0of0_LM90of100_sketch_srft_seed0_size10000",
@@ -342,8 +368,15 @@ if __name__ == "__main__":
     elif dataset=="ImageNet":
         if budget == 3:
             experiment_names = [
-                "lanczos_seed1_size_HM0of0_LM9of10_sketch_srft_seed0_size10000000",
-                "lanczos_seed1_size_HM2of3_LM0of0"
+                "lanczos_seed1_size_HM0of0_LM27of30_sketch_srft_seed1_size20000000",
+                #"lanczos_seed1_size_HM0of0_LM10of12_sketch_srft_seed1_size50000000",
+                #"lanczos_seed1_size_HM0of0_LM5of6_sketch_srft_seed1_size100000000",
+                "eig_lanczos_seed1_size_HM2of3_LM0of0",
+                "diagonal_lla_sample1000", 
+                "swag_vec3_mom0.99_collect1000",
+                "hess_lanczos_seed1_size_HM2of3_LM0of0",
+                "lanczos_seed1_size_HM2of3_LM0of0",
+                #"max_logit",
             ]
     all_aurocs = {name : [] for name in names}
 
@@ -353,20 +386,22 @@ if __name__ == "__main__":
         if dataset=="CIFAR-10":
             fig = plt.figure(figsize=(9,7))
         else:
-            fig = plt.figure(figsize=(5,4))
+            #fig = plt.figure(figsize=(5,4))
+            fig = plt.figure(figsize=(7,4))
         ax = fig.add_axes([0.1, 0.1, 0.8, 0.8]) # main axes
         print(f"data size {subsample_trainset}")
 
         for name, experiment_name in zip(names, experiment_names):
 
-            if "swag" in experiment_name or "ensemble" in experiment_name:
+            if "swag" in experiment_name or "scores_ensemble" in experiment_name or "max_logit" in experiment_name:
                 experiment_name = f"scores_{experiment_name}"
             else:
-                experiment_name = f"scores_subsample{subsample_trainset}_{experiment_name}"
+                experiment_name = f"scores_subsample{subsample_trainset}_{experiment_name}" if name!="LLA-d" else f"scores_subsample{10000}_{experiment_name}"
+            print(experiment_name)
 
             aurocs, eigss = [], []
 
-            if "ensemble" in experiment_name:
+            if "scores_ensemble" in experiment_name:
                 model_seeds = [1, 4, 7]  if budget==3 else [1]
             else:
                 if dataset == "MNIST":
@@ -377,7 +412,7 @@ if __name__ == "__main__":
                     model_seeds = [1,2,3,4,5] 
                 if dataset == "CelebA":
                     model_seeds = [1, 2, 3]
-                    model_seeds = [1]
+                    #model_seeds = [1]
                 if dataset == "ImageNet":
                     model_seeds = [1]
         
@@ -421,23 +456,34 @@ if __name__ == "__main__":
                 linestyle="dotted", 
                 markersize=7
                 )
+            print(f"AAA {name} gets marker {c}  {markers[c]}")
             plt.fill_between(list(range(len(aurocs.mean(axis=0)))), aurocs.mean(axis=0) + aurocs.std(axis=0), aurocs.mean(axis=0) - aurocs.std(axis=0), alpha=alpha, color=color)
             all_aurocs[name].append(aurocs.mean(axis=0))
             all_aurocs[name].append(aurocs.std(axis=0))
             
 
-            #if dataset=="CelebA":
-            #    print(f"{aurocs.mean():.2f} ({aurocs.std(axis=0).mean():.2f})- {name}   - {experiment_name}")
+            if dataset=="CelebA":
+                print([f"{aa.mean():.2f} ({aa.std(axis=0).mean():.2f})" for aa in (aurocs[:, :1], aurocs[:, 1:])] , f" - {name}")
             #print(aurocs.shape)
             if dataset=="CIFAR-10" or dataset=="MNIST":
                 print([f"{aa.mean():.2f} ({aa.std(axis=0).mean():.2f})" for aa in (aurocs[:, :1], aurocs[:, 1:2], aurocs[:, 2:])] , f" - {name}")
             elif dataset=="FMNIST" or dataset=="CelebA":
                 #print([f"{aa.mean():.2f} ({aa.std(axis=0).mean():.2f})" for aa in (aurocs[:, :1], aurocs[:, 1:])] , f" - {name}")
                 print([f"{aa.mean():.3f} ({aa.std(axis=0).mean():.2f})" for aa in (aurocs[:, :1], aurocs[:, 1:2], aurocs[:, 2:3], aurocs[:, 3:4])] , f" - {name}")
+            elif dataset=="ImageNet":
+                #print([f"{aa.mean():.2f} ({aa.std(axis=0).mean():.2f})" for aa in (aurocs[:, :1], aurocs[:, 1:])] , f" - {name}")
+                print([f"{aa:.2f} " for aa in aurocs.mean(axis=0)] , f" - {name}")
+                for_table = ""
+                for s in [f"{aa:.2f} " for aa in aurocs.mean(axis=0)]:
+                    for_table += f"{s} & "
+                print(for_table)
             else:
                 print(f"{aurocs.mean():.4f} ({aurocs.std(axis=0).mean():.2f})" , f" - {name}")
             #print(f"{label} - {np.mean(aurocs.mean(axis=0)):.3f} (std {np.mean(aurocs.std(axis=0)):.3f}) - {ood_datasets[0]}")
             c += 1
+            if dataset=="ImageNet":
+                if name=="LLA-d" or name=="SWAG":
+                    c += 1
             #for d, ood_dataset in enumerate(ood_datasets[:2]):
             #for d, ood_dataset in enumerate(ood_datasets):
             #    print(f"\t\t {aurocs.mean(axis=0)[d]:.3f} (std {aurocs.std(axis=0)[d]:.3f}) - {ood_dataset}")
@@ -457,17 +503,25 @@ if __name__ == "__main__":
             plt.ylim([0.56, 0.95])
             if budget==10:
                 plt.ylim([0.56, 1.])
+        elif dataset=="ImageNet":
+            plt.ylim([0.35, 0.85])
         #elif dataset=="CelebA":
         #    plt.ylim([0.51, 0.63])
         #else:
         #    plt.ylim([0.48,0.65])
-        if dataset=="CIFAR-10" or dataset=="FMNIST" or dataset=="CelebA":
+        if dataset=="CIFAR-10" or dataset=="FMNIST" or dataset=="CelebA" or dataset=="ImageNet":
             ax.set_xticks(list(range(len(ood_datasets))), ood_datasets_xlabel, fontsize='medium')
         else:
             ax.set_xticks(list(range(len(ood_datasets))), ood_datasets, fontsize='medium')
         if dataset!="CelebA":
-            plt.xticks(rotation = 80)
+            plt.xticks(rotation = 40)
         plt.ylabel("AUROC", fontsize='medium')
         plt.grid(which="major", axis="both", linestyle="dotted")
 
         plt.savefig(f"figures/{dataset}_budget{budget}.pdf", bbox_inches='tight')
+
+
+        for_table = ""
+        for s in ood_datasets_xlabel:
+            for_table += f"{s} & "
+        print(for_table)
