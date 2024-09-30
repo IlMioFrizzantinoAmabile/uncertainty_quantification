@@ -1,0 +1,12 @@
+tree_math
+matfree
+optax==0.2.2
+matplotlib
+numpy==1.26.3
+flax==0.8.4
+scipy
+urllib3
+scikit-learn
+pandas
+tqdm
+seaborn
