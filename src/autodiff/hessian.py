@@ -33,13 +33,19 @@ def get_hessian_vector_product(
         raise ValueError(f"Likelihood {likelihood_type} not supported. Use either 'regression' or 'classification'.")
     
     params = params_dict['params']
-    if not model.has_batch_stats:
-        loss_on_data = lambda p: negative_log_likelihood(model.apply_test(p, X), Y)
-    else:
+    if model.has_attentionmask:
+        attention_mask = params_dict['attention_mask']
+        relative_position_index = params_dict['relative_position_index']
+        loss_on_data = lambda p: negative_log_likelihood(
+            model.apply_test(p, attention_mask, relative_position_index, X),
+            Y)
+    elif model.has_batch_stats:
         batch_stats = params_dict['batch_stats']
         loss_on_data = lambda p: negative_log_likelihood(
             model.apply_test(p, batch_stats, X), 
             Y)
+    else:
+        loss_on_data = lambda p: negative_log_likelihood(model.apply_test(p, X), Y)
     devectorize_fun = flatten_util.ravel_pytree(params)[1]
 
     @jax.jit
@@ -71,13 +77,21 @@ def get_hessian_vector_product_dataloader(
         raise ValueError(f"Likelihood {likelihood_type} not supported. Use either 'regression' or 'classification'.")
     
     params = params_dict['params']
-    if not model.has_batch_stats:
-        loss_apply = lambda x, y, p: negative_log_likelihood(model.apply_test(p, x), y)
-    else:
+    if model.has_attentionmask:
+        attention_mask = params_dict['attention_mask']
+        relative_position_index = params_dict['relative_position_index']
+        loss_apply = lambda x, y, p: negative_log_likelihood(
+            model.apply_test(p, attention_mask, relative_position_index, x), 
+            y)
+    elif model.has_batch_stats:
         batch_stats = params_dict['batch_stats']
-        loss_apply = lambda x, y, p: negative_log_likelihood(model.apply_test(p, batch_stats, x), y)
+        loss_apply = lambda x, y, p: negative_log_likelihood(
+            model.apply_test(p, batch_stats, x), 
+            y)
+    else:
+        loss_apply = lambda x, y, p: negative_log_likelihood(model.apply_test(p, x), y)
     devectorize_fun = flatten_util.ravel_pytree(params)[1]
-    flatten_param = jnp.array(flatten_util.ravel_pytree(params)[0])
+    flatten_param = jnp.asarray(flatten_util.ravel_pytree(params)[0])
 
     @jax.jit
     def hessian_tree_product_batch(X, Y, tree):
@@ -133,11 +147,15 @@ def get_hessian_vector_product_dataloader(
 def get_sqrt_hessian_loss_explicit(params_dict, model, likelihood_type = "regression", output_dim=None):
 
     params = params_dict['params']
-    if not model.has_batch_stats:
-        model_on_params = lambda data: model.apply_test(params, data)
-    else:
+    if model.has_attentionmask:
+        attention_mask = params_dict['attention_mask']
+        relative_position_index = params_dict['relative_position_index']
+        model_on_params = lambda data: model.apply_test(params, attention_mask, relative_position_index, data), 
+    elif model.has_batch_stats:
         batch_stats = params_dict['batch_stats']
         model_on_params = lambda data: model.apply_test(params, batch_stats, data)
+    else:
+        model_on_params = lambda data: model.apply_test(params, data)
 
     if likelihood_type == "regression" or likelihood_type == "binary_multiclassification":
         if output_dim is None:

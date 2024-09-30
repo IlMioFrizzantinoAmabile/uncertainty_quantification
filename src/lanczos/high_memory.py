@@ -24,9 +24,11 @@ def high_memory_lanczos(
     #basis, (diag, offdiag) = decomp.decompose_fori_loop(v0, mv_prod, algorithm=lanczos_alg)
     #estimate = tridiag_sym(n_iter, materialize=False)
     estimate = tridiag_sym(n_iter, materialize=True)
-    decomposition, remainder = estimate(mv_prod, v0)
+    #decomposition, remainder = estimate(mv_prod, v0)
+    #basis, matrix = decomposition
+    result = estimate(mv_prod, v0)
+    basis, matrix = result.Q_tall.T, result.J_small
     #basis, (diag, offdiag) = decomposition
-    basis, matrix = decomposition
     #hm_eig_val, hm_trid_eig_vec = jax.scipy.linalg.eigh_tridiagonal(diag, offdiag)#, lapack_driver='stebz')
     hm_eig_val, hm_trid_eig_vec = jax.scipy.linalg.eigh(matrix)
     # flip eigenvalues and eigenvectors so that they are in decreasing order

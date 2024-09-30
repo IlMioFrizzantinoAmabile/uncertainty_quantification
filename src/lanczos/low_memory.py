@@ -47,7 +47,7 @@ def low_memory_lanczos_to_tridiag(key, mv_prod, dim, n_iter):
     w = wp - a * v_old
     alphas = alphas.at[0].set(a)
 
-    @jax.jit
+    #@jax.jit
     def lanczos_step(i, state):
         (w, betas, skvs, alphas, v_old) = state
         b = jnp.linalg.norm(w)
@@ -141,7 +141,7 @@ def smart_lanczos_to_tridiag_sketch(key, mv_prod, dim, n_iter, sketch_op):
     w = wp - a * v_old
     M = M.at[0, 0].set(a)
 
-    @jax.jit
+    #@jax.jit
     def lanczos_step(i, state):
         (w, M, skvs, v_old) = state
         b = jnp.linalg.norm(w)

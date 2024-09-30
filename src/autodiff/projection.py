@@ -4,7 +4,7 @@ import flax
 import functools
 from jax import flatten_util
 
-from src.training.losses import get_loss_function
+from src.training.losses import get_likelihood
 
 import time
 
@@ -16,29 +16,35 @@ def get_loss_projection_vector_product(
         params_dict,
         model: flax.linen.Module,
         dataloader,
-        likelihood_type: str = "regression"
+        likelihood_type: str = "regression",
+        num_epochs: int = 1,
     ):
 
-    _, loss_function_test = get_loss_function(
-        model,
+    negative_log_likelihood, _ = get_likelihood(
         likelihood = likelihood_type,
         class_frequencies = dataloader.dataset.dataset.class_frequencies if likelihood_type=="binary_multiclassification" else None
     )
 
-    params = params_dict['params']
-    if not model.has_batch_stats:
-        loss_apply = lambda x, y, p: loss_function_test(p, x, y)
-    else:
+    if model.has_attentionmask:
+        attention_mask = params_dict['attention_mask']
+        relative_position_index = params_dict['relative_position_index']
+        model_apply = lambda data, p: model.apply_test(p, attention_mask, relative_position_index, data)
+    elif model.has_batch_stats:
         batch_stats = params_dict['batch_stats']
-        loss_apply = lambda x, y, p: loss_function_test(p, batch_stats, x, y)
+        model_apply = lambda data, p: model.apply_test(p, batch_stats, data)
+    else:
+        model_apply = lambda data, p: model.apply_test(p, data)
+    loss_apply = lambda x, y, p: negative_log_likelihood(model_apply(x, p), y)
+    params = params_dict['params']
     devectorize_fun = flatten_util.ravel_pytree(params)[1]
     flatten_param = jnp.asarray(flatten_util.ravel_pytree(params)[0])
     
     @jax.jit
     def single_datapoint_projection_vector_product(X, Y, v):
         loss_on_data = functools.partial(loss_apply, X, Y)
-        ret, grad = jax.value_and_grad(loss_on_data, has_aux=True)(params_dict['params'])
-        loss, _ = ret
+        #ret, grad = jax.value_and_grad(loss_on_data, has_aux=True)(params_dict['params'])
+        #loss, _ = ret
+        loss, grad = jax.value_and_grad(loss_on_data)(params_dict['params'])
         grad = jnp.asarray(flatten_util.ravel_pytree(grad)[0])
 
         projection = (jnp.dot(v,grad) / jnp.dot(grad,grad)) * grad
@@ -69,7 +75,7 @@ def get_loss_projection_vector_product(
         """
         #i = 0
         #norms = []
-        for e in range(10):
+        for e in range(num_epochs):
             for batch in dataloader:
                 X = jnp.asarray(batch[0].numpy())
                 Y = jnp.asarray(batch[1].numpy())
@@ -78,6 +84,7 @@ def get_loss_projection_vector_product(
                 #if not i%1000:
                 #    norms.append(jnp.dot(v,v))
                     #print(jnp.dot(v,v))
+        print("projection done")
         return v#, norms
     
     result_shape = jax.ShapeDtypeStruct(flatten_param.shape, flatten_param.dtype)
@@ -150,7 +157,7 @@ def get_projection_vector_product(
         return sqrtH_JJt_sqrtH_v
     
 
-    #@jax.jit
+    @jax.jit
     def single_batch_projection_vector_product(X, v):
 
         # instatiate the ntk
@@ -226,11 +233,14 @@ def get_projection_vector_product(
                 X = jnp.asarray(batch[0].numpy())
                 start = time.time()
                 v = single_batch_projection_vector_product(X, v)
-                print(f".... inside the loop it took {time.time()-start} seconds")
+                #print(f".... inside the loop it took {time.time()-start} seconds")
+                #print("AAAA", jnp.sum(v**2))
+        print("projection done")
         return v
     
     result_shape = jax.ShapeDtypeStruct(flatten_param.shape, flatten_param.dtype)
     def pure_callback_projection_vector_product(v):
         return jax.pure_callback(projection_vector_product, result_shape, v)
     
+    #return projection_vector_product
     return jax.jit(pure_callback_projection_vector_product)

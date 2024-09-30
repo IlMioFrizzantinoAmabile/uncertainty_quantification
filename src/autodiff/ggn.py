@@ -117,13 +117,13 @@ def get_ggn_vector_product_dataloader(
     x_init = jnp.asarray(batch[0].numpy())
 
     start = time.time()
-    ggn_vector_product_batch(x_init, flatten_param)
+    ggn_vector_product_batch(jnp.ones_like(x_init), 2*jnp.ones_like(flatten_param))
     print(f"One BATCH GGN vp took {time.time()-start} seconds")
     start = time.time()
-    ggn_vector_product_batch(x_init, jnp.ones_like(flatten_param))
+    ggn_vector_product_batch(x_init, flatten_param)
     print(f"Again...... it took {time.time()-start} seconds")
     start = time.time()
-    ggn_vector_product_batch(jnp.ones_like(x_init), 2*jnp.ones_like(flatten_param))
+    ggn_vector_product_batch(x_init, jnp.ones_like(flatten_param))
     print(f"Aaand again...... it took {time.time()-start} seconds")
 
     
@@ -137,13 +137,15 @@ def get_ggn_vector_product_dataloader(
         for batch in dataloader:
             #print("batch")
             X = jnp.asarray(batch[0].numpy())
+            #start = time.time()
             result_batch = ggn_vector_product_batch(X, v)
             result += result_batch
+            #print(f".... inside the loop it took {time.time()-start} seconds")
         return result
     
     result_shape = jax.ShapeDtypeStruct(flatten_param.shape, flatten_param.dtype)
     def ggn_vector_product(v):
         return jax.pure_callback(ggn_vector_product_dataloader, result_shape, v)
-        #return ggn_vector_product_dataloader(v)
-    #return ggn_vector_product
-    return jax.jit(ggn_vector_product)
+
+    #return ggn_vector_product_dataloader  
+    return jax.jit(ggn_vector_product)  
