@@ -17,6 +17,7 @@ from src.ood_scores.swag import swag_score_fun
 from src.ood_scores.hm_lanczos import high_memory_lanczos_score_fun, smart_lanczos_score_fun
 from src.ood_scores.lm_lanczos import low_memory_lanczos_score_fun
 from src.ood_scores.projected_ensemble import projected_ensemble_score_fun
+from src.ood_scores.max_logit import max_logit_score_fun
 
 parser = argparse.ArgumentParser()
 # dataset hyperparams
@@ -36,7 +37,7 @@ parser.add_argument("--model_seed", default=420, type=int)
 ##############
 # ood scores #
 ##############
-parser.add_argument("--score", type=str, choices=["scod", "swag", "ensemble", "projected_ensemble", "local_ensemble", "sketched_local_ensemble", "low_rank_lla", "smart_lla", "diagonal_lla"], default=None)
+parser.add_argument("--score", type=str, choices=["scod", "swag", "ensemble", "projected_ensemble", "local_ensemble", "sketched_local_ensemble", "low_rank_lla", "smart_lla", "diagonal_lla", "max_logit"], default=None)
 # lanczos
 parser.add_argument("--lanczos_hm_iter", default=10, type=int, help="Lancsos high-memory iterations to run")
 parser.add_argument("--lanczos_lm_iter", default=100, type=int, help="Lancsos low-mwmory iterations to run")
@@ -67,6 +68,7 @@ parser.add_argument("--swag_momentum", default=0.9, type=float)
 parser.add_argument("--swag_collect_interval", default=3, type=int)
 # projected ensemble
 parser.add_argument("--n_epochs_projected_ensemble", default=1, type=int, help="Used for projected ensemble score")
+parser.add_argument("--use_proj_loss", action="store_true", required=False, default=False)
 
 # print more stuff
 parser.add_argument("--verbose", action="store_true", required=False, default=False)
@@ -206,10 +208,13 @@ if __name__ == "__main__":
             args_dict["sketch_padding"] = 46 # 196517106 -> 196517152 = 2^5 × 13 × 19 × 23^2 × 47
         else:
             args_dict["sketch_padding"] = get_optimal_padding(compute_num_params(params_dict['params']))
-            print(f"No sketch_padding value given. Computed the optimal one: {args_dict["sketch_padding"]}")
+            print(f"No sketch_padding value given. Computed the optimal one: {args_dict['sketch_padding']}")
         
 
-    if args.score == "ensemble":
+    if args.score == "max_logit":
+        score_fun = max_logit_score_fun(model, params_dict)
+        eigenval = []
+    elif args.score == "ensemble":
         params_dicts_list = [params_dict]
         for i in range(args.model_seed + 1, args.model_seed + args.ensemble_size):
             _, params_dict , _= pretrained_model_from_string(
@@ -331,10 +336,14 @@ if __name__ == "__main__":
     if args.subsample_trainset is not None:
         experiment_name += f"subsample{args.subsample_trainset}_"
 
-    if args.score == "ensemble":
+    if args.score == "max_logit":
+        experiment_name += "max_logit"
+    elif args.score == "ensemble":
         experiment_name += f"ensemble_size{args.ensemble_size}"
     elif args.score == "projected_ensemble":
-        experiment_name += f"projected_ensemble_size{args.ensemble_size}"
+        experiment_name += f"projected_ensemble_size{args.ensemble_size}_epoch{args.n_epochs_projected_ensemble}"
+        if args.use_proj_loss:
+            experiment_name += "_loss"
     elif args.score == "diagonal_lla":
         experiment_name += f"diagonal_lla_sample{args.hutchinson_samples}"
     elif args.score == "scod":

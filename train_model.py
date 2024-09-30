@@ -7,7 +7,6 @@ import datetime
 from src.datasets import augmented_dataloader_from_string, get_output_dim
 from src.models import model_from_string, pretrained_model_from_string
 from src.training.trainer import gradient_descent
-from src.training.trainer_swin import gradient_descent_swin
 from src.training.trainer_fancy import gradient_descent_fancy
 
 #import warnings
@@ -167,16 +166,7 @@ if __name__ == "__main__":
         )
 
     if not args.fancy:
-        if True or args.model not in ["SWIN_tiny", "SWIN_large"]:
-            params_dict, stats_dict = gradient_descent(
-                    model, 
-                    train_loader, 
-                    valid_loader, 
-                    args_dict,
-                    pretrained_params_dict = None if args.run_name_pretrained is None else pretrained_params_dict
-                )
-        else:
-            params_dict, stats_dict = gradient_descent_swin(
+        params_dict, stats_dict = gradient_descent(
                 model, 
                 train_loader, 
                 valid_loader, 
