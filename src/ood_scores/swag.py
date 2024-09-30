@@ -5,7 +5,7 @@ import optax
 import tqdm
 import time
 from src.models import compute_num_params
-from src.training.losses import get_loss_function
+from src.training.losses import get_likelihood
 
 
 def swag_score_fun(
@@ -25,53 +25,111 @@ def swag_score_fun(
     )
     opt_state = optimizer.init(params_dict['params'])
 
-    ########################
-    # define training step #
-    loss_function_train, _ = get_loss_function(
-        model,
+    
+    #############
+    # init loss #
+    negative_log_likelihood, extra_stats_function = get_likelihood(
         likelihood = args_dict["likelihood"],
         class_frequencies = train_loader.dataset.dataset.class_frequencies if args_dict["likelihood"]=="binary_multiclassification" else None
     )
     if not model.has_batch_stats:
-        #@jax.jit
-        def train_step(opt_state, params_dict, x, y):
-            loss_fn = lambda p: loss_function_train(p, x, y)
-            # Get loss, gradients for loss, and other outputs of loss function
-            ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
-            loss, (acc_or_sse, ) = ret
-            # Update parameters
-            param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
-            params_dict['params'] = optax.apply_updates(params_dict['params'], param_updates)
-            return opt_state, params_dict, loss, acc_or_sse
-    elif model.has_batch_stats and not model.has_dropout:
-        #@jax.jit
-        def train_step(opt_state, params_dict, x, y):
-            loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y)
-            # Get loss, gradients for loss, and other outputs of loss function
-            ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
-            loss, (acc_or_sse, new_model_state) = ret
-            # Update parameters and batch statistics
-            param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
-            params_dict = {
-                'params' : optax.apply_updates(params_dict['params'], param_updates),
-                'batch_stats' : new_model_state['batch_stats']
-            }
-            return opt_state, params_dict, loss, acc_or_sse
-    elif model.has_batch_stats and model.has_dropout:
-        #@jax.jit
-        def train_step(opt_state, params_dict, x, y, key_dropout):
-            loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y, key_dropout)
-            # Get loss, gradients for loss, and other outputs of loss function
-            ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
-            loss, (acc_or_sse, new_model_state) = ret
-            # Update parameters and batch statistics
-            param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
-            params_dict = {
-                'params' : optax.apply_updates(params_dict['params'], param_updates),
-                'batch_stats' : new_model_state['batch_stats']
-            }
-            return opt_state, params_dict, loss, acc_or_sse
-        key_dropout = jax.random.PRNGKey(420)
+        if not model.has_attentionmask:
+            # MLP, LeNet, ConvNeXt
+            @jax.jit
+            def loss_function_train(params, x, y):
+                preds = model.apply_train(params, x)
+                loss = negative_log_likelihood(preds, y)
+                acc_or_sse = extra_stats_function(preds, y)
+                return loss, (acc_or_sse, )
+        else:
+            # SWIN
+            @jax.jit
+            def loss_function_train(params, attention_mask, relative_position_index, x, y, key_dropout):
+                preds, new_model_state = model.apply_train(params, attention_mask, relative_position_index, x, key_dropout)
+                loss = negative_log_likelihood(preds, y)
+                acc_or_sse = extra_stats_function(preds, y)
+                return loss, (acc_or_sse, new_model_state)
+    elif model.has_batch_stats:
+        if not model.has_dropout:
+            # ResNet, GoogleNet
+            @jax.jit
+            def loss_function_train(params, batch_stats, x, y):
+                preds, new_model_state = model.apply_train(params, batch_stats, x)
+                loss = negative_log_likelihood(preds, y)
+                acc_or_sse = extra_stats_function(preds, y)
+                return loss, (acc_or_sse, new_model_state)
+        else:
+            # VAN
+            @jax.jit
+            def loss_function_train(params, batch_stats, x, y, key_dropout):
+                preds, new_model_state = model.apply_train(params, batch_stats, x, key_dropout)
+                loss = negative_log_likelihood(preds, y)
+                acc_or_sse = extra_stats_function(preds, y)
+                return loss, (acc_or_sse, new_model_state)
+
+
+    if not model.has_batch_stats:
+        if not model.has_attentionmask:
+            # MLP, LeNet
+            @jax.jit
+            def train_step(opt_state, params_dict, x, y):
+                loss_fn = lambda p: loss_function_train(p, x, y)
+                # Get loss, gradients for loss, and other outputs of loss function
+                ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
+                loss, (acc_or_sse, ) = ret
+                # Update parameters
+                param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
+                params_dict['params'] = optax.apply_updates(params_dict['params'], param_updates)
+                return opt_state, params_dict, loss, acc_or_sse
+        else:
+            # SWIN
+            @jax.jit
+            def train_step(opt_state, params_dict, x, y, key_dropout):
+                loss_fn = lambda p: loss_function_train(p, params_dict['attention_mask'], params_dict['relative_position_index'], x, y, key_dropout)
+                # Get loss, gradients for loss, and other outputs of loss function
+                ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
+                loss, (acc_or_sse, new_model_state) = ret
+                # Update parameters and batch statistics
+                param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
+                params_dict = {
+                    'params' : optax.apply_updates(params_dict['params'], param_updates),
+                    'attention_mask' : new_model_state['attention_mask'],
+                    'relative_position_index' : new_model_state['relative_position_index']
+                }
+                return opt_state, params_dict, loss, acc_or_sse
+            key_dropout = jax.random.PRNGKey(420)
+    elif model.has_batch_stats:
+        if not model.has_dropout:
+            # ResNet, GoogleNet
+            @jax.jit
+            def train_step(opt_state, params_dict, x, y):
+                loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y)
+                # Get loss, gradients for loss, and other outputs of loss function
+                ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
+                loss, (acc_or_sse, new_model_state) = ret
+                # Update parameters and batch statistics
+                param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
+                params_dict = {
+                    'params' : optax.apply_updates(params_dict['params'], param_updates),
+                    'batch_stats' : new_model_state['batch_stats']
+                }
+                return opt_state, params_dict, loss, acc_or_sse
+        else:
+            # VAN
+            @jax.jit
+            def train_step(opt_state, params_dict, x, y, key_dropout):
+                loss_fn = lambda p: loss_function_train(p, params_dict['batch_stats'], x, y, key_dropout)
+                # Get loss, gradients for loss, and other outputs of loss function
+                ret, grads = jax.value_and_grad(loss_fn, has_aux=True)(params_dict['params'])
+                loss, (acc_or_sse, new_model_state) = ret
+                # Update parameters and batch statistics
+                param_updates, opt_state = optimizer.update(grads, opt_state, params_dict['params'])
+                params_dict = {
+                    'params' : optax.apply_updates(params_dict['params'], param_updates),
+                    'batch_stats' : new_model_state['batch_stats']
+                }
+                return opt_state, params_dict, loss, acc_or_sse
+            key_dropout = jax.random.PRNGKey(420)
     
     def fit_batch_stats(train_loader, params_dict):
         for batch in train_loader:
@@ -195,25 +253,48 @@ def swag_score_fun(
         return sample
     
 
-
+    output_dim = Y.shape[-1]
     devectorize_fun = flatten_util.ravel_pytree(params_dict['params'])[1]
+
+    #@jax.jit
+    #def score_fun(datapoints):
+    #    key = jax.random.PRNGKey(0)
+    #    preds = []
+    #    for s in range(50):
+    #        key, key_s = jax.random.split(key, 2)
+    #        sample_params = devectorize_fun(sample(key_s, scale=0.5))
+    #        
+    #        if model.has_batch_stats:
+    #            #batch_stats = fit_batch_stats(train_loader, params_dict)
+    #            pred = model.apply_test(sample_params, params_dict["batch_stats"], datapoints)
+    #        elif model.has_attentionmask:
+    #            pred = model.apply_test(sample_params, params_dict["attention_mask"], params_dict["relative_position_index"], datapoints)
+    #        else:
+    #            pred = model.apply_test(sample_params, datapoints)
+    #        preds.append(pred)
+    #    preds = jnp.asarray(preds)
+    #    return preds.var(axis=0).sum(axis=-1)
+
+    if model.has_batch_stats:
+        model_apply = lambda sample_params, datapoints: model.apply_test(sample_params, params_dict["batch_stats"], datapoints)
+    elif model.has_attentionmask:
+        model_apply = lambda sample_params, datapoints: model.apply_test(sample_params, params_dict["attention_mask"], params_dict["relative_position_index"], datapoints)
+    else:
+        model_apply = lambda sample_params, datapoints: model.apply_test(sample_params, datapoints)
 
     @jax.jit
     def score_fun(datapoints):
-        key = jax.random.PRNGKey(0)
-        preds = []
-        for s in range(50):
-            key, key_s = jax.random.split(key, 2)
-            sample_params = devectorize_fun(sample(key_s, scale=0.5))
-            
-            if not model.has_batch_stats:
-                pred = model.apply_test(sample_params, datapoints)
-            else:
-                #batch_stats = fit_batch_stats(train_loader, params_dict)
-                pred = model.apply_test(sample_params, params_dict["batch_stats"], datapoints)
-            preds.append(pred)
-        preds = jnp.asarray(preds)
+    
+        def scan_body(carry, key):
+            sample_params = devectorize_fun(sample(key, scale=0.5))
+            pred = model_apply(sample_params, datapoints)
+            return carry, pred
+
+        keys = jax.random.split(jax.random.PRNGKey(0), 50)
+
+        _, preds = jax.lax.scan(scan_body, None, keys)
+
         return preds.var(axis=0).sum(axis=-1)
-    
-    
+
+
     return score_fun, None, None

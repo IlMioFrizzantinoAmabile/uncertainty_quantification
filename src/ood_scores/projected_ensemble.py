@@ -4,7 +4,7 @@ import functools
 from jax import flatten_util
 from src.models import compute_num_params
 from src.datasets.utils import get_subset_loader
-from src.autodiff.projection import get_projection_vector_product
+from src.autodiff.projection import get_projection_vector_product, get_loss_projection_vector_product
 import time
 
 
@@ -25,7 +25,13 @@ def projected_ensemble_score_fun(
         trainset_size,
         batch_size = args_dict["train_batch_size"]
     )
-    projection_vector_product = get_projection_vector_product(
+
+    if not args_dict["use_proj_loss"]:
+        get_projection_vp = get_projection_vector_product
+    else:
+        get_projection_vp = get_loss_projection_vector_product
+
+    projection_vector_product = get_projection_vp(
         params_dict,
         model,
         train_loader,
@@ -39,13 +45,14 @@ def projected_ensemble_score_fun(
     devectorize_fun = flatten_util.ravel_pytree(params)[1]
 
 
-    @jax.jit
+    #@jax.jit
     def get_sample(key):
         sample = jax.random.normal(key, shape=(n_params,))
         return projection_vector_product(sample)
-    #start = time.time()
-    #get_sample(jax.random.PRNGKey(0))
-    #print(f"One PROJECTION sample took {time.time()-start} seconds")
+    start = time.time()
+    sample = get_sample(jax.random.PRNGKey(0))
+    print(f"One PROJECTION sample took {time.time()-start} seconds")
+    print("NORMmmm ", jnp.sum(sample**2))
     #start = time.time()
     #get_sample(jax.random.PRNGKey(1))
     #print(f"Again.. it took {time.time()-start} seconds")
@@ -55,9 +62,11 @@ def projected_ensemble_score_fun(
     keys = jax.random.split(jax.random.PRNGKey(args_dict["model_seed"]), args_dict["ensemble_size"])
 
     samples = jax.vmap(get_sample)(keys)
+    #samples = jax.lax.map(get_sample, keys)
     #samples = []
     #for key in keys:
     #    samples.append(get_sample(key))
+    #    print("NORM ", jnp.sum(samples[-1]**2))
     #samples = jnp.asarray(samples)
     print(f"Projecting {args_dict['ensemble_size']} samples, dataset size {trainset_size}, with {n_params} params model -> took {time.time()-start:.3f} seconds")
 

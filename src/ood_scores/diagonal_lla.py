@@ -6,7 +6,7 @@ from src.autodiff.ggn import get_ggn_vector_product, get_ggn_vector_product_data
 from src.autodiff.hessian import get_hessian_vector_product, get_hessian_vector_product_dataloader
 from src.autodiff.jacobian import get_jacobian_vector_product, get_jacobianT_vector_product
 from src.estimators.hutchinson import get_diagonal
-from src.estimators.frobenius import get_frobenius_norm
+from src.estimators.frobenius import get_frobenius_norm, get_frobenius_norm_sequential
 import time
 
 
@@ -61,9 +61,9 @@ def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
     start = time.time()
     ggn_vector_product(jax.random.normal(jax.random.PRNGKey(0), shape=(n_params,)))
     print(f"One GGN vp took {time.time()-start} seconds")
-    start = time.time()
-    ggn_vector_product(jax.random.normal(jax.random.PRNGKey(1), shape=(n_params,)))
-    print(f"Again.. it took {time.time()-start} seconds")
+    #start = time.time()
+    #ggn_vector_product(jax.random.normal(jax.random.PRNGKey(1), shape=(n_params,)))
+    #print(f"Again.. it took {time.time()-start} seconds")
     
     # perform hutchinson and estimate the diagonal
     start = time.time()
@@ -95,7 +95,7 @@ def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
         jacobianT_vector_product = get_jacobianT_vector_product(params_dict, model, datapoint, single_datapoint=True)
         std_jacobian_vector_product = lambda vector: parameter_std_diagonal * jacobianT_vector_product(vector)
         
-        variance = get_frobenius_norm(
+        variance = get_frobenius_norm_sequential(
             std_jacobian_vector_product,
             dim_in = args_dict["output_dim"],
         )
@@ -126,4 +126,5 @@ def diagonal_lla_score_fun(model, params_dict, train_loader, args_dict):
         )
         return qf_fake
     
-    return score_fun, ggn_quadratic_form, approx_ggn_quadratic_form
+    #return score_fun, ggn_quadratic_form, approx_ggn_quadratic_form
+    return score_fun, None, None
